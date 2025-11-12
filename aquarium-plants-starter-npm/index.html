@@ -7,7 +7,7 @@
     <style>
       html, body { height: 100%; margin: 0; background: #051424; color: #d9f1ff; font-family: system-ui, sans-serif; }
       #wrap { display: grid; grid-template-columns: 1fr 320px; height: 100%; }
-      canvas { display:block; width: 100%; height: 100%; }
+      canvas { display:block; width: 155%; height: 100%; }
       aside { padding: 12px 16px; border-left: 1px solid rgba(255,255,255,0.1); background: #0a233b; }
       h1 { font-size: 16px; margin: 0 0 8px; }
       .stat { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
@@ -23,7 +23,7 @@
   <body>
     <div id="wrap">
       <canvas id="gl"></canvas>
-      <aside>
+      <aside hidden>
         <h1>Plants Controls</h1>
         <div class="stat">FPS: <span id="fps">–</span></div>
         <label>Plant count: <span id="plantCountLabel"></span></label>

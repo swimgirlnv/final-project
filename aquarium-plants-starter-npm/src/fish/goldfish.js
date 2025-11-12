@@ -1,4 +1,5 @@
 import { vs, fs } from "./goldfishShaders.js";
+import { mat4, vec3 } from './linearUtilities.js';
 
 // ---------- Utilities
 function createGL(canvas) {
@@ -116,6 +117,192 @@ function extrude_ring(positions, indices, orig_ring_indices, colors, offset) {
     return newIndices;
 }
 
+function fill_ring_pole(positions, indices, orig_ring_indices, colors, offset, reverse) {
+  let newIndex = positions.length / 3;
+  let newIndices = [newIndex];
+  let num_orig = orig_ring_indices.length;
+
+  let avgX = 0.0;
+  let avgY = 0.0;
+  let avgZ = 0.0;
+  for (let i = 0; i < num_orig; ++i) {
+    let curOrigIndex = orig_ring_indices[i];
+    let nextOrigIndex;
+    if (reverse) {
+      nextOrigIndex = (i - 1) < 0? num_orig - 1 : orig_ring_indices[(i - 1)];
+    }
+    else {
+      nextOrigIndex = orig_ring_indices[(i + 1) % num_orig];
+    }
+
+    // indices for triangulation
+    indices.push(
+      curOrigIndex,
+      newIndex,
+      nextOrigIndex
+    );
+
+    // get pos data for avg
+    avgX += positions[curOrigIndex * 3];
+    avgY += positions[curOrigIndex * 3 + 1];
+    avgZ += positions[curOrigIndex * 3 + 2];
+  }
+  avgX /= num_orig; 
+  avgY /= num_orig; 
+  avgZ /= num_orig;
+
+  positions.push(
+    avgX + offset.x,
+    avgY + offset.y,
+    avgZ + offset.z
+  );
+  colors.push(
+    0.0,
+    0.0,
+    1.0
+  );
+
+  // return pole index
+  return newIndices;
+}
+
+function fill_ring_fan(indices, orig_ring_indices, reverse) {
+  let num_orig = orig_ring_indices.length;
+  let index0 = orig_ring_indices[0];
+
+  for (let i = 1; i < num_orig; ++i) {
+    let curOrigIndex = orig_ring_indices[i];
+    let nextOrigIndex = orig_ring_indices[(i + 1) % num_orig];
+
+    // indices for triangulation
+    if (reverse) {
+      indices.push(
+        index0,
+        nextOrigIndex,
+        curOrigIndex
+      );
+    }
+    else {
+      indices.push(
+        index0,
+        nextOrigIndex,
+        curOrigIndex
+      );
+    }
+  }
+}
+
+function scale_around_point(positions, scaled_verts, origin = {}, scale = {}) {
+  for (let i = 0; i < scaled_verts.length; ++i) {
+    let idx = scaled_verts[i];
+    let origPos = {
+      x: positions[idx * 3], 
+      y: positions[(idx * 3) + 1], 
+      z: positions[(idx * 3) + 2]
+    };
+    // start with new points in pivot space and apply transform
+    let newPos = {
+      x: (origPos.x - origin.x) * scale.x,
+      y: (origPos.y - origin.y) * scale.y,
+      z: (origPos.z - origin.z) * scale.z
+    };
+    // return to original space
+    newPos = {
+      x: newPos.x + origin.x,
+      y: newPos.y + origin.y,
+      z: newPos.z + origin.z
+    };
+
+    // set result
+    positions[idx * 3] = newPos.x;
+    positions[(idx * 3) + 1] = newPos.y;
+    positions[(idx * 3) + 2] = newPos.z;
+  }
+
+  return;
+}
+
+// rot is in radians, axis must be 0 (x), 1 (y), or 2 (z)
+// point will be updated by reference
+function apply_rotation(point, rot, axis) {
+  const originalX = point.x;
+  const originalY = point.y;
+  const originalZ = point.z;
+
+  const cosRot = Math.cos(rot);
+  const sinRot = Math.sin(rot);
+
+  if (axis === 0) {
+    // Rotation around X-axis (transforms Y and Z)
+    point.y = originalY * cosRot - originalZ * sinRot;
+    point.z = originalY * sinRot + originalZ * cosRot;
+  }
+  else if (axis === 1) {
+    // Rotation around Y-axis (transforms X and Z)
+    point.x = originalX * cosRot + originalZ * sinRot;
+    point.z = originalX * -sinRot + originalZ * cosRot;
+  }
+  else if (axis === 2) {
+    // Rotation around Z-axis (transforms X and Y)
+    point.x = originalX * cosRot - originalY * sinRot;
+    point.y = originalX * sinRot + originalY * cosRot;
+  }
+  else { 
+    // don't do anything
+    console.log("ERROR: invalid axis used: ${axis}");
+    return point;
+  }
+}
+
+function rotate_around_point(positions, rot_verts, origin = {}, rot = {}) {
+  let radRot = {x: rot.x * Math.PI / 180.0, y: rot.y * Math.PI / 180.0, z: rot.z * Math.PI / 180.0};
+
+  for (let i = 0; i < rot_verts.length; ++i) {
+    let idx = rot_verts[i];
+    let origPos = {
+      x: positions[idx * 3],
+      y: positions[(idx * 3) + 1],
+      z: positions[(idx * 3) + 2]
+    };
+    let newPos = {
+      x: origPos.x - origin.x,
+      y: origPos.y - origin.y,
+      z: origPos.z - origin.z
+    };
+
+    // apply transform xyz rot
+    apply_rotation(newPos, radRot.x, 0);
+    apply_rotation(newPos, radRot.y, 1);
+    apply_rotation(newPos, radRot.z, 2);
+
+    // return to original space
+    newPos = {
+      x: newPos.x + origin.x,
+      y: newPos.y + origin.y,
+      z: newPos.z + origin.z
+    };
+
+    // set result
+    positions[idx * 3] = newPos.x;
+    positions[(idx * 3) + 1] = newPos.y;
+    positions[(idx * 3) + 2] = newPos.z;
+  }
+
+  return;
+}
+
+function translate(positions, translated_verts, offset) {
+  for (let i = 0; i < translated_verts.length; ++i) {
+    let idx = translated_verts[i];
+
+    positions[idx * 3] += offset.x;
+    positions[(idx * 3) + 1] += offset.y;
+    positions[(idx * 3) + 2] += offset.z;
+  }
+  
+  return;  
+}
+
 // ---------- GOLDFISH BODY PART GENERATORS. PASS POS/IDX ARRAYS BY REFERENCE FOR UPDATE
 function gfish_head(positions, indices, colors) {
   return;
@@ -163,9 +350,15 @@ function createFishGeometry(gl) {
   colors.push(0.0, 0.0, 1.0);
   colors.push(1.0, 0.0, 0.0);*/
 
-  let orig_idx = create_ring(positions, indices, colors, 8, 1.0, 1.0, {x: -0.5, y: 1.0, z: 3.0});
-  let extruded_idx = extrude_ring(positions, indices, orig_idx, colors, {x: -1.0, y: 1.0, z: 4.0});
-
+  let orig_idx = create_ring(positions, indices, colors, 8, 1.0, 1.0, {x: 0.0, y: 0.0, z: 0.0});
+  let extruded_idx = extrude_ring(positions, indices, orig_idx, colors, {x: 0.0, y: 0.0, z: 1.0});
+  fill_ring_fan(indices, extruded_idx);
+  //let pole_idx = fill_ring_pole(positions, indices, extruded_idx, colors, {x: 0.0, y: 0.0, z: 0.0}, false);
+  let orig_pole_idx = fill_ring_pole(positions, indices, orig_idx, colors, {x: 0.0, y: 0.0, z: 0.0}, true);
+  //scale_around_point(positions, pole_idx, {x: 0.0, y: 0.0, z: 3.0}, {x: 1.0, y: 1.0, z: 2.0});
+  let all_idx = [];
+  all_idx.push(...orig_idx, ...extruded_idx, ...orig_pole_idx);
+  rotate_around_point(positions, all_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 0.0, y: 0.0, z: 0.0});
   // end functions to create geo
 
   const vao = gl.createVertexArray();
@@ -214,10 +407,9 @@ function makeProjection(width, height) {
   const scale = 1.6; // zoom
   const left = -aspect * scale;
   const right = aspect * scale;
-  const bottom = 0.0;
-  const top = 2.0 * scale;
-  const near = -10,
-    far = 10;
+  const bottom = -scale;
+  const top = scale;
+  const near = -10, far = 10;
   const proj = [
     2 / (right - left),
     0,
@@ -236,7 +428,7 @@ function makeProjection(width, height) {
     -(far + near) / (far - near),
     1,
   ];
-  return proj;
+  return proj; 
 }
 
 function identity() {
@@ -247,10 +439,49 @@ function randRange(a, b) {
   return a + Math.random() * (b - a);
 }
 
+function updateViewMatrix(camera, viewMatrix) {
+  const { azimuth, elevation, radius, target } = camera;
+
+  // Calculate camera position in spherical coordinates
+  const cosElev = Math.cos(elevation);
+  const sinElev = Math.sin(elevation);
+  const cosAz = Math.cos(azimuth);
+  const sinAz = Math.sin(azimuth);
+
+  // Position relative to origin
+  const pos_x = radius * cosElev * sinAz;
+  const pos_y = radius * sinElev;
+  const pos_z = radius * cosElev * cosAz;
+
+  // The camera's actual eye position in world space
+  const eyePosition = []; 
+  vec3.add(eyePosition, [pos_x, pos_y, pos_z], target); 
+
+  // Set the 'lookAt' matrix: lookAt(out, eye, center, up)
+  mat4.lookAt(
+    viewMatrix,
+    eyePosition,    // Eye/Position
+    target,         // Center/Target
+    [0, 1, 0]       // Up vector
+  );
+}
+
 // ---------- Main initialization and animation export
 export function initGoldfish() {
+  // Camera State
+  const camera = {
+    azimuth: Math.PI / 4, 
+    elevation: -Math.PI / 6, 
+    radius: 5.0,
+    target: [0.0, 0.0, 0.0] // [x, y, z] target position
+  };
+  const viewMatrix = mat4.create(); // Use your new mat4.create()
+
   const canvas = document.getElementById("gl");
   const gl = createGL(canvas);
+  
+  gl.enable(gl.CULL_FACE);
+  gl.cullFace(gl.FRONT);
 
   const prog = program(gl, vs, fs, {0: "vs_Pos", 1: "vs_Col"});
   gl.useProgram(prog);
@@ -280,6 +511,44 @@ export function initGoldfish() {
   const heightAvg = document.getElementById("height");
   const scatterBtn = document.getElementById("scatter");
   const fpsEl = document.getElementById("fps");
+
+  let isDragging = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  canvas.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
+
+  canvas.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+
+    const sensitivity = 0.005;
+
+    camera.azimuth -= dx * sensitivity;
+    camera.elevation -= dy * sensitivity;
+    // Clamp elevation
+    camera.elevation = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, camera.elevation));
+
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    camera.radius += e.deltaY * 0.01;
+    camera.radius = Math.max(1.0, camera.radius); // Min radius
+  });
+
   /*
   function updateCountLabel() {
     plantCountLabel.textContent = String(state.count);
@@ -387,15 +656,17 @@ export function initGoldfish() {
     }
     */
 
+    updateViewMatrix(camera, viewMatrix);
+
     // Uniforms
     const proj = makeProjection(canvas.width / canvas.height, 1);
-    const view = identity();
+    //const view = identity();
 
     gl.useProgram(prog);
     gl.bindVertexArray(gfish.vao);
 
     gl.uniformMatrix4fv(u_proj, false, proj);
-    gl.uniformMatrix4fv(u_view, false, view);
+    gl.uniformMatrix4fv(u_view, false, viewMatrix);
     gl.uniform1f(u_time, now * 0.001);
     gl.uniform2f(u_res, canvas.width, canvas.height);
 
