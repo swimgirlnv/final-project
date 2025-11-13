@@ -1,53 +1,108 @@
 import { vs, fs } from "./goldfishShaders.js";
-import { mat4, vec3 } from './linearUtilities.js';
-
-// ---------- Utilities
-function createGL(canvas) {
-  const gl = canvas.getContext("webgl2", { antialias: true, alpha: false });
-  if (!gl) throw new Error("WebGL2 not supported");
-  return gl;
-}
-
-function compile(gl, type, source) {
-  const sh = gl.createShader(type);
-  gl.shaderSource(sh, source);
-  gl.compileShader(sh);
-  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    throw new Error(gl.getShaderInfoLog(sh) || "Shader compile error");
-  }
-  return sh;
-}
-
-function program(gl, vsSrc, fsSrc, attributeBindings = {}) {
-  const p = gl.createProgram();
-  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, vsSrc));
-  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fsSrc));
-
-  // bind attribute locations:
-  for (const [location, name] of Object.entries(attributeBindings)) {
-    gl.bindAttribLocation(p, location, name);
-  }
-
-  gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-    throw new Error(gl.getProgramInfoLog(p) || "Program link error");
-  }
-  return p;
-}
-
-function resizeCanvasToDisplaySize(canvas) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const width = Math.floor(canvas.clientWidth * dpr);
-  const height = Math.floor(canvas.clientHeight * dpr);
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-    return true;
-  }
-  return false;
-}
+import { CatmullRomSpline3D } from "./SplineVec3.js";
 
 // ---------- BASIC GEOMETRY FUNCTIONS
+
+function create_subdiv_box(positions, indices, colors, subX, subY, subZ, sizeX, sizeY, sizeZ) {
+  let currentIndex = positions.length / 3;
+  let all_idx = [];
+
+  const buildFace = (
+    uAxis, vAxis, wAxis, // 0=X, 1=Y, 2=Z -> Axes of the plane
+    uSub, vSub, wSize,   // Subdivisions and size for each axis
+    uSize, vSize,        // Total size along U and V axes
+    wSign                // +1 or -1 for the face direction (e.g., +Z or -Z)
+  ) => {
+    const currentStartIdx = currentIndex;
+
+    // Calculate the normal vector for this face
+    const normal = [0, 0, 0];
+    normal[wAxis] = wSign; // not needed here since we are not shading
+
+    // Iterate over the grid (u and v segments)
+    for (let j = 0; j <= vSub; ++j) { // V-axis (height/rows)
+      for (let i = 0; i <= uSub; ++i) { // U-axis (width/columns)
+
+        // Calculate the normalized position (0.0 to 1.0)
+        const u = i / uSub;
+        const v = j / vSub;
+
+        // Calculate the 3D position (x, y, z)
+        const pos = [0, 0, 0];
+                
+        // Position along the U-axis (from -size/2 to +size/2)
+        pos[uAxis] = (u - 0.5) * uSize; 
+        
+        // Position along the V-axis (from -size/2 to +size/2)
+        pos[vAxis] = (v - 0.5) * vSize;
+        
+        // Position along the W-axis (constant depth)
+        pos[wAxis] = wSign * wSize / 2;
+
+        // Push data for the current vertex
+        positions.push(pos[0], pos[1], pos[2]);
+        colors.push(...normal);
+        //normals.push(normal[0], normal[1], normal[2]);
+
+        //uvs.push(u, 1 - v);
+
+        if (i < uSub && j < vSub) {
+          const base = currentIndex;
+          const uSegs = uSub + 1;
+
+          // Quad vertices:
+          // v1 (base) --- v2 (base + uSegs)
+          //   |             |
+          // v3 (base + 1) - v4 (base + uSegs + 1)
+          
+          const v1 = base;
+          const v2 = base + 1;
+          const v3 = base + uSegs;
+          const v4 = base + uSegs + 1;
+
+          // Triangle 1: v1, v3, v2 (Clockwise order for +Z/-X/-Y faces)
+          // If wSign is negative, reverse order for correct culling
+          if (wSign > 0) {
+              indices.push(v1, v3, v2);
+              indices.push(v2, v3, v4);
+          } else { // Reverse winding order for back faces
+              indices.push(v1, v2, v3);
+              indices.push(v2, v4, v3);
+          }
+        }
+        all_idx.push(currentIndex);
+        currentIndex++;
+      }
+    }
+    return currentIndex;
+  };
+    // --- 1. POSITIVE Z FACE (Front) ---
+    // Plane is Z-constant, U=X, V=Y.
+    buildFace(0, 1, 2, subX, subY, sizeZ, sizeX, sizeY, 1);
+
+    // --- 2. NEGATIVE Z FACE (Back) ---
+    // Plane is Z-constant, U=X, V=Y, but normal points backwards (-1).
+    buildFace(0, 1, 2, subX, subY, sizeZ, sizeX, sizeY, -1);
+    
+    // --- 3. POSITIVE X FACE (Right) ---
+    // Plane is X-constant, U=Z, V=Y.
+    buildFace(2, 1, 0, subZ, subY, sizeX, sizeZ, sizeY, 1);
+
+    // --- 4. NEGATIVE X FACE (Left) ---
+    // Plane is X-constant, U=Z, V=Y, but normal points backwards (-1).
+    buildFace(2, 1, 0, subZ, subY, sizeX, sizeZ, sizeY, -1);
+
+    // --- 5. POSITIVE Y FACE (Top) ---
+    // Plane is Y-constant, U=X, V=Z.
+    buildFace(0, 2, 1, subX, subZ, sizeY, sizeX, sizeZ, 1);
+    
+    // --- 6. NEGATIVE Y FACE (Bottom) ---
+    // Plane is Y-constant, U=X, V=Z, but normal points backwards (-1).
+    buildFace(0, 2, 1, subX, subZ, sizeY, sizeX, sizeZ, -1);
+    
+    return all_idx;
+}
+
 // Creates ring in a clockwise manner, returns indices of new points
 function create_ring(positions, indices, colors, numVerts, radX, radY, translate = {}) {
   let PI2 = Math.PI * 2.0;
@@ -129,7 +184,7 @@ function fill_ring_pole(positions, indices, orig_ring_indices, colors, offset, r
     let curOrigIndex = orig_ring_indices[i];
     let nextOrigIndex;
     if (reverse) {
-      nextOrigIndex = (i - 1) < 0? num_orig - 1 : orig_ring_indices[(i - 1)];
+      nextOrigIndex = (i - 1) < 0? orig_ring_indices[num_orig - 1] : orig_ring_indices[(i - 1)];
     }
     else {
       nextOrigIndex = orig_ring_indices[(i + 1) % num_orig];
@@ -303,63 +358,152 @@ function translate(positions, translated_verts, offset) {
   return;  
 }
 
+function create_ring_spline(positions, indices, colors, num_verts_ring, numRings, posCtrlPts, scaleCtrlPts, endPoleOffset, beginPoleOffset) {
+  const posPath = new CatmullRomSpline3D(
+    posCtrlPts,
+    0.5
+  );
+  const scalePath = new CatmullRomSpline3D(
+    scaleCtrlPts,
+    0.5
+  );
+
+  let all_idx = [];
+  let orig_ring;
+
+  let prevPos = [];
+  let prevScale = [];
+  let prevLoopIdx = [];
+  let curLoopIdx = [];
+  for (let i = 0.0; i <= 1.0; i += (1.0 / numRings)) {
+    let pos = posPath.getPoint(i);
+    let scale = scalePath.getPoint(i);
+
+    // first loop
+    if (i < (0.5 / numRings)) {
+      curLoopIdx = create_ring(
+        positions, indices, colors, num_verts_ring, 
+        scale[0], scale[1], {x: pos[0], y: pos[1], z: pos[2]}
+      );
+      all_idx.push(...curLoopIdx);
+      orig_ring = curLoopIdx;
+    }
+    else {
+      // extrude ring to desired position with desired scale
+      curLoopIdx = extrude_ring(
+        positions, indices, prevLoopIdx, colors,
+        {x: pos[0] - prevPos[0], y: pos[1] - prevPos[1], z: pos[2] - prevPos[2]}
+      );
+
+      scale_around_point(
+        positions, curLoopIdx,
+        {x: pos[0], y: pos[1], z: pos[2]},
+        {x: scale[0] / prevScale[0], y: scale[1] / prevScale[1], z: scale[2] / prevScale[2]}
+      );
+      all_idx.push(...curLoopIdx);
+    }
+
+    prevLoopIdx = curLoopIdx;
+    prevPos = pos;
+    prevScale = scale;
+  }
+
+  let orig_pole_idx = fill_ring_pole(positions, indices, orig_ring, colors, beginPoleOffset, true);
+  let end_pole_idx = fill_ring_pole(positions, indices, curLoopIdx, colors, endPoleOffset, true);
+  all_idx.push(...orig_pole_idx, ...end_pole_idx);
+  
+  return all_idx;
+}
+
 // ---------- GOLDFISH BODY PART GENERATORS. PASS POS/IDX ARRAYS BY REFERENCE FOR UPDATE
 function gfish_head(positions, indices, colors) {
+  // ring, extrude while scaling down
+  // end cap with special mouth geo function
   return;
 }
 
 function gfish_body(positions, indices, colors) {
-  return;
+  // use spline with radius value, interpolate with even rings for body
+  let all_idx = [];
+  all_idx = create_ring_spline(
+    positions, indices, colors, 
+    8, // num verts in a ring 
+    10,// num rings in spline
+    [  // position spline
+      [0.0, 1.0, 0.0],
+      [0.0, 1.02, 0.2],
+      [0.0, 1.035, 0.35],
+      [0.0, 1.035, 0.45]
+    ], 
+    [  // scale spline
+      [0.03, 0.04, 1.0],
+      [0.06, 0.07, 1.0],
+      [0.03, 0.05, 1.0],
+      [0.01, 0.02, 1.0]
+    ],
+    {x: 0, y: 0, z: 0.0}, //end pole offset
+    {x: 0, y: 0, z: -0.025}  //begin pole offset
+  );
+  return all_idx;
 }
 
 function gfish_caudal(positions, indices, colors) {
-  return;
+  // cube (/loop) with special deformation
+  let all_idx = create_subdiv_box(
+    positions, indices, colors, 
+    4, 4, 4, 1, 2, 3
+  );
+  return all_idx;
 }
 
 function gfish_dorsal(positions, indices, colors) {
+  // cube (/loop) with special deformation, maybe follow spline
   return;
 }
 
 function gfish_pectoral(positions, indices, colors) {
+  // subdiv cube with fun values
   return;
 }
 
 function gfish_anal_fin(positions, indices, colors) {
+  // same as dorsal, but smaller and probably less variety (all references looked the same here)
   return;
 }
 
-// ---------- Geometry: Calls on fcns for head, body, caudal fin, dorsal fin, pectoral fin, pelvic fin, anal fin, colors(?)
+function compile(gl, type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(sh) || "Shader compile failed");
+  return sh;
+}
+function makeProgram(gl, vsSrc, fsSrc, bindings) {
+  const p = gl.createProgram();
+  const v = compile(gl, gl.VERTEX_SHADER, vsSrc);
+  const f = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
+  gl.attachShader(p, v);
+  gl.attachShader(p, f);
+  for (const [name, loc] of Object.entries(bindings))
+    gl.bindAttribLocation(p, loc, name);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS))
+    throw new Error(gl.getProgramInfoLog(p) || "Link error");
+  gl.deleteShader(v);
+  gl.deleteShader(f);
+  return p;
+}
+
+// ---------- Geometry: Calls on fcns for head, body, caudal fin, dorsal fin, pectoral fin, pelvic fin, anal fin
 function createFishGeometry(gl) {
   const positions = [];
   //const uvs = []; // probably will not use these for fish. Will instead opt for 3D noise functions and solid coloring
   const indices = [];
   const colors = [];
 
-  // call functions to create geo
-  /*
-  positions.push(0.5, 3.0, 1.0);
-  positions.push(-0.5, 3.0, 1.0);
-  positions.push(-0.5, 1.0, 0.0);
-  positions.push(0.5, 1.0, 0.0);
-
-  indices.push(0, 1, 3);
-  indices.push(3, 1, 2);
-
-  colors.push(1.0, 0.0, 0.0);
-  colors.push(0.0, 1.0, 0.0);
-  colors.push(0.0, 0.0, 1.0);
-  colors.push(1.0, 0.0, 0.0);*/
-
-  let orig_idx = create_ring(positions, indices, colors, 8, 1.0, 1.0, {x: 0.0, y: 0.0, z: 0.0});
-  let extruded_idx = extrude_ring(positions, indices, orig_idx, colors, {x: 0.0, y: 0.0, z: 1.0});
-  fill_ring_fan(indices, extruded_idx);
-  //let pole_idx = fill_ring_pole(positions, indices, extruded_idx, colors, {x: 0.0, y: 0.0, z: 0.0}, false);
-  let orig_pole_idx = fill_ring_pole(positions, indices, orig_idx, colors, {x: 0.0, y: 0.0, z: 0.0}, true);
-  //scale_around_point(positions, pole_idx, {x: 0.0, y: 0.0, z: 3.0}, {x: 1.0, y: 1.0, z: 2.0});
-  let all_idx = [];
-  all_idx.push(...orig_idx, ...extruded_idx, ...orig_pole_idx);
-  rotate_around_point(positions, all_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 0.0, y: 0.0, z: 0.0});
-  // end functions to create geo
+  gfish_body(positions, indices, colors);
+  //gfish_caudal(positions, indices, colors);
 
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
@@ -395,95 +539,64 @@ function createFishGeometry(gl) {
     vao,
     count: indices.length,
     attribs: {
-      vs_Pos_loc,
-      vs_Col_loc
+      vs_Pos : 0,
+      vs_Col : 1
     },
   };
 }
 
-// ---------- Camera/Projection helpers
-function makeProjection(width, height) {
-  const aspect = width / height;
-  const scale = 1.6; // zoom
-  const left = -aspect * scale;
-  const right = aspect * scale;
-  const bottom = -scale;
-  const top = scale;
-  const near = -10, far = 10;
-  const proj = [
-    2 / (right - left),
-    0,
-    0,
-    0,
-    0,
-    2 / (top - bottom),
-    0,
-    0,
-    0,
-    0,
-    -2 / (far - near),
-    0,
-    -(right + left) / (right - left),
-    -(top + bottom) / (top - bottom),
-    -(far + near) / (far - near),
-    1,
-  ];
-  return proj; 
-}
-
-function identity() {
-  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-}
-
-function randRange(a, b) {
-  return a + Math.random() * (b - a);
-}
-
-function updateViewMatrix(camera, viewMatrix) {
-  const { azimuth, elevation, radius, target } = camera;
-
-  // Calculate camera position in spherical coordinates
-  const cosElev = Math.cos(elevation);
-  const sinElev = Math.sin(elevation);
-  const cosAz = Math.cos(azimuth);
-  const sinAz = Math.sin(azimuth);
-
-  // Position relative to origin
-  const pos_x = radius * cosElev * sinAz;
-  const pos_y = radius * sinElev;
-  const pos_z = radius * cosElev * cosAz;
-
-  // The camera's actual eye position in world space
-  const eyePosition = []; 
-  vec3.add(eyePosition, [pos_x, pos_y, pos_z], target); 
-
-  // Set the 'lookAt' matrix: lookAt(out, eye, center, up)
-  mat4.lookAt(
-    viewMatrix,
-    eyePosition,    // Eye/Position
-    target,         // Center/Target
-    [0, 1, 0]       // Up vector
-  );
-}
-
 // ---------- Main initialization and animation export
-export function initGoldfish() {
-  // Camera State
-  const camera = {
-    azimuth: Math.PI / 4, 
-    elevation: -Math.PI / 6, 
-    radius: 5.0,
-    target: [0.0, 0.0, 0.0] // [x, y, z] target position
-  };
-  const viewMatrix = mat4.create(); // Use your new mat4.create()
+export function createGoldfish(gl) {
+    const bindings = {
+      vs_Pos: 0,
+      vs_Col: 1
+    };
 
-  const canvas = document.getElementById("gl");
-  const gl = createGL(canvas);
+    const prog = makeProgram(gl, vs, fs, bindings);
+    const gfish = createFishGeometry(gl, 28);
+    gl.bindVertexArray(gfish.vao);
   
+    // uniforms
+    const U = (n) => gl.getUniformLocation(prog, n);
+    const u_proj = U("u_proj"),
+      u_view = U("u_view"),
+      u_time = U("u_time"),
+      u_res = U("u_res");
+    const u_fogColor = U("u_fogColor");
+    const u_fogNear = U("u_fogNear");
+    const u_fogFar = U("u_fogFar");
+  
+    return {
+      draw(shared) {
+        gl.useProgram(prog);
+        gl.bindVertexArray(gfish.vao);
+        gl.uniformMatrix4fv(u_proj, false, shared.proj);
+        gl.uniformMatrix4fv(u_view, false, shared.view);
+        gl.uniform1f(u_time, shared.time);
+        gl.uniform2f(u_res, shared.res[0], shared.res[1]);
+        gl.uniform3f(
+          u_fogColor,
+          shared.fogColor[0],
+          shared.fogColor[1],
+          shared.fogColor[2]
+        );
+        gl.uniform1f(u_fogNear, shared.fogNear);
+        gl.uniform1f(u_fogFar, shared.fogFar);
+        gl.drawElementsInstanced(
+          gl.TRIANGLES,
+          gfish.count,
+          gl.UNSIGNED_SHORT,
+          0,
+          1
+        );
+      },
+    };
+  
+  /*
   gl.enable(gl.CULL_FACE);
   gl.cullFace(gl.FRONT);
 
-  const prog = program(gl, vs, fs, {0: "vs_Pos", 1: "vs_Col"});
+  const prog = makeProgram(gl, vs, fs, {vs_Pos : 0, vs_Col : 1, });
   gl.useProgram(prog);
 
   // Bind attribute locations explicitly to match our VAO setup
@@ -549,69 +662,6 @@ export function initGoldfish() {
     camera.radius = Math.max(1.0, camera.radius); // Min radius
   });
 
-  /*
-  function updateCountLabel() {
-    plantCountLabel.textContent = String(state.count);
-  }
-  updateCountLabel();
-
-  plantCount.addEventListener("input", (e) => {
-    state.count = parseInt(plantCount.value, 10);
-    updateCountLabel();
-    scatterPlants();
-  });
-  currentStrength.addEventListener(
-    "input",
-    (e) => (state.currentStrength = parseFloat(currentStrength.value))
-  );
-  currentAngle.addEventListener(
-    "input",
-    (e) => (state.currentAngle = parseFloat(currentAngle.value))
-  );
-  flex.addEventListener("input", (e) => (state.flex = parseFloat(flex.value)));
-  heightAvg.addEventListener("input", (e) => {
-    state.avgHeight = parseFloat(heightAvg.value);
-    scatterPlants();
-  });
-  scatterBtn.addEventListener("click", scatterPlants);
-
-  // Mouse pushes
-  let mouse = { x: 0, y: 0, down: false };
-  canvas.addEventListener("pointermove", (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const nx = (e.clientX - rect.left) / rect.width;
-    const ny = (e.clientY - rect.top) / rect.height;
-    // map to world-ish units
-    mouse.x = (nx - 0.5) * 3.2;
-    mouse.y = (1.0 - ny) * 3.2;
-  });
-  canvas.addEventListener("pointerdown", () => (mouse.down = true));
-  canvas.addEventListener("pointerup", () => (mouse.down = false));
-  
-  // Click near left edge to 'plant' a clump
-  canvas.addEventListener("click", (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const nx = (e.clientX - rect.left) / rect.width;
-    if (nx < 0.15) {
-      // add ~10 plants in a clump at the bottom-left
-      const cx = -1.6 + Math.random() * 0.1;
-      const cz = -0.3 + Math.random() * 0.2;
-      for (let i = 0; i < 10 && state.count < instancesMax; i++) {
-        state.base.push(cx + randRange(-0.15, 0.15), cz + randRange(-0.1, 0.1));
-        state.height.push(
-          randRange(0.5 * state.avgHeight, 1.6 * state.avgHeight)
-        );
-        state.phase.push(Math.random() * 6.2831);
-        state.amp.push(randRange(0.05, 0.25));
-        state.hue.push(randRange(0.28, 0.42));
-        state.count++;
-      }
-      plantCount.value = String(state.count);
-      updateCountLabel();
-      instanceBufs.update(gl, state);
-    }
-  });
-  */
   // ---------- Render loop
   gl.enable(gl.DEPTH_TEST);
   gl.clearColor(0.02, 0.07, 0.13, 1);
@@ -643,19 +693,6 @@ export function initGoldfish() {
     // Background gradient to simulate depth
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // Compute current vector from UI + mouse push
-    //let dir = [Math.cos(state.currentAngle), Math.sin(state.currentAngle)];
-    // if mouse is down, make current flow away from the cursor
-    /*
-    if (mouse.down) {
-      // from mouse to center (0, 0 in world XZ)
-      const vx = -mouse.x;
-      const vz = -(mouse.y - 0.0);
-      const len = Math.hypot(vx, vz) || 1.0;
-      dir = [vx / len, vz / len];
-    }
-    */
-
     updateViewMatrix(camera, viewMatrix);
 
     // Uniforms
@@ -680,4 +717,5 @@ export function initGoldfish() {
     );
   }
   render();
+  */
 }

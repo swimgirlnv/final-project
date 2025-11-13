@@ -2,6 +2,7 @@
 import { createEgeriaLayer } from "./plants/egeriaDensa.js";
 import { createGrassLayer } from "./plants/grass.js";
 import { createFloorLayer } from "./tank/tankFloor.js";
+import { createGoldfish } from "./fish/goldfish.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -180,6 +181,7 @@ gl.clearColor(0.02, 0.07, 0.13, 1);
 const floor = createFloorLayer(gl);
 const grass = createGrassLayer(gl);
 const egeria = createEgeriaLayer(gl);
+const gfish = createGoldfish(gl);
 
 const FOG = { color: [0.02, 0.07, 0.13], near: 2.0, far: 5.5 };
 floor.setFog(FOG.color, FOG.near, FOG.far);
@@ -296,4 +298,5 @@ let last = performance.now(),
   floor.draw(shared);
   if (showGrass?.checked !== false) grass.draw(shared);
   if (showEgeria?.checked !== false) egeria.draw(shared);
+  gfish.draw(shared);
 })();

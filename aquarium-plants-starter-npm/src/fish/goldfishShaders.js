@@ -15,6 +15,7 @@ uniform vec2  u_res;         // viewport size
 // Varyings
 out vec3 v_pos;
 out vec3 v_color;
+out float v_camDist;
 
 float hash11(float n){ return fract(sin(n)*43758.5453123); }
 
@@ -32,24 +33,30 @@ vec3 h2rgb(float h){
 }
 
 void main() {
-  // just pass defined color to frag shader
+  // just pass defined color to frag shader for now
   v_color = vs_Col;
 
-  vec3 world = vs_Pos;
+  vec4 V = u_view * vec4(vs_Pos, 1.0);
+  v_camDist = length(V.xyz);
+  vec4 world = u_proj * V;
 
   // Project
-  vec4 projPos = u_proj * u_view * vec4(world, 1.0);
-  v_pos = vec3(projPos.x, projPos.y, projPos.z);
-  gl_Position = vec4(v_pos, 1.0);
+  v_pos = vec3(world.x, world.y, world.z);
+  gl_Position = world;
 }`;
 
 export const fs = `#version 300 es
 precision highp float;
 
+in vec3 v_pos;
 in vec3 v_color;
+in float v_camDist;
 out vec4 outColor;
 
 uniform float u_time;
+uniform vec3  u_fogColor;
+uniform float u_fogNear;
+uniform float u_fogFar;
 
 // Simple caustics look via animated stripes
 float caustic(float x){
@@ -57,6 +64,8 @@ float caustic(float x){
 }
 
 void main() {
-  outColor = vec4(v_color, 1.0);
+  float fog = smoothstep(u_fogNear, u_fogFar, v_camDist); // 0 near -> 1 far
+  vec3 col = mix(v_color, u_fogColor, fog);
+  outColor = vec4(col, 1.0);
 }
 `;
