@@ -88,6 +88,15 @@
           ><input id="showEgeria" type="checkbox" checked /> Show egeria</label
         >
 
+        <label
+          ><input id="showBarclaya" type="checkbox" checked /> Show
+          barclaya</label
+        >
+
+        <label
+          ><input id="showWood" type="checkbox" checked /> Show driftwood</label
+        >
+
         <hr style="opacity: 0.15" />
 
         <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
@@ -138,6 +147,86 @@
           value="1.0"
         />
         <button class="btn" id="scatter">Scatter plants</button>
+
+        <hr style="opacity: 0.15" />
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+          Driftwood
+        </h2>
+        <label>Pieces</label>
+        <input id="woodPieces" type="range" min="1" max="6" value="3" />
+        <label>Branches per piece</label>
+        <input id="woodBranches" type="range" min="1" max="8" value="3" />
+        <label>Gnarliness</label>
+        <input
+          id="woodGnarl"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.55"
+        />
+        <label>Twist</label>
+        <input
+          id="woodTwist"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.55"
+        />
+        <label>Detail</label>
+        <input
+          id="woodDetail"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.6"
+        />
+        <label>Grain frequency</label>
+        <input
+          id="woodGrain"
+          type="range"
+          min="10"
+          max="60"
+          step="1"
+          value="28"
+        />
+        <label>Grain contrast</label>
+        <input
+          id="woodGrainMix"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.45"
+        />
+        <label>Color warmth</label>
+        <input
+          id="woodWarm"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.65"
+        />
+
+        <hr style="opacity:.15">
+<h2 style="font-size:13px;margin:10px 0 6px;opacity:.9">Tank floor</h2>
+<label>Sand ↔ Gravel</label>
+<input id="floorGravelMix" type="range" min="0" max="1" step="0.01" value="0" />
+<label>Height amplitude</label>
+<input id="floorAmp" type="range" min="0" max="0.5" step="0.005" value="0.18" />
+<label>Pebble density</label>
+<input id="floorGravelScale" type="range" min="2" max="20" step="0.5" value="7" />
+<label>Pebble bump</label>
+<input id="floorGravelBump" type="range" min="0" max="0.06" step="0.002" value="0.02" />
+<div style="margin:6px 0">Palette:
+  <label><input type="radio" name="floorPalette" id="floorPalSand"    checked> Sand</label>
+  <label><input type="radio" name="floorPalette" id="floorPalGrey">    Grey gravel</label>
+  <label><input type="radio" name="floorPalette" id="floorPalRainbow"> Rainbow gravel</label>
+</div>
+
       </aside>
     </div>
     <script type="module" src="./src/main.js"></script>

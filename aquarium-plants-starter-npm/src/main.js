@@ -1,7 +1,9 @@
 // src/main.js
-import { createEgeriaLayer } from "./plants/egeriaDensa.js";
-import { createGrassLayer } from "./plants/grass.js";
+import { createEgeriaLayer } from "./plants/egeriaDensa/egeriaDensa.js";
+import { createGrassLayer } from "./plants/grass/grass.js";
 import { createFloorLayer } from "./tank/tankFloor.js";
+import { createBarclayaLayer } from "./plants/barclayaLongifolia/barclayaLongifolia.js";
+import { createDriftwoodLayer } from "./decorations/driftwood/driftwood.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -83,10 +85,13 @@ function lookAt(eye, center, up) {
 }
 
 /* ---------- DOM ---------- */
-const canvas = document.getElementById("gl"); // ⬅️ declare before using it
+const canvas = document.getElementById("gl");
 const fpsEl = document.getElementById("fps");
 const showGrass = document.getElementById("showGrass");
 const showEgeria = document.getElementById("showEgeria");
+const showBarclaya = document.getElementById("showBarclaya");
+const showWood = document.getElementById("showWood");
+
 const currentStrength = 0;
 const currentAngle = -3.14;
 
@@ -104,6 +109,25 @@ const egBranch = document.getElementById("egeriaBranch");
 
 const scatterBtn = document.getElementById("scatter");
 const regenBtn = document.getElementById("regenerate");
+
+// wood controls
+const woodPieces = document.getElementById("woodPieces");
+const woodBranches = document.getElementById("woodBranches");
+const woodGnarl = document.getElementById("woodGnarl");
+const woodTwist = document.getElementById("woodTwist");
+const woodDetail = document.getElementById("woodDetail");
+const woodGrain = document.getElementById("woodGrain");
+const woodGrainMix = document.getElementById("woodGrainMix");
+const woodWarm = document.getElementById("woodWarm");
+
+// tank floor controls
+const floorGravelMix = document.getElementById("floorGravelMix");
+const floorAmp = document.getElementById("floorAmp");
+const floorGravelScale = document.getElementById("floorGravelScale");
+const floorGravelBump = document.getElementById("floorGravelBump");
+const palSand = document.getElementById("floorPalSand");
+const palGrey = document.getElementById("floorPalGrey");
+const palRainbow = document.getElementById("floorPalRainbow");
 
 /* ---------- Orbit camera ---------- */
 const cam = {
@@ -175,11 +199,15 @@ document.getElementById("resetCam")?.addEventListener("click", () => {
 /* ---------- GL + layers ---------- */
 const gl = createGL(canvas);
 gl.enable(gl.DEPTH_TEST);
+gl.cullFace(gl.BACK);
 gl.clearColor(0.02, 0.07, 0.13, 1);
 
 const floor = createFloorLayer(gl);
+floor.setFloorFog(0.55, 0.12);
 const grass = createGrassLayer(gl);
 const egeria = createEgeriaLayer(gl);
+const barclaya = createBarclayaLayer(gl);
+const driftwood = createDriftwoodLayer(gl);
 
 const FOG = { color: [0.02, 0.07, 0.13], near: 2.0, far: 5.5 };
 floor.setFog(FOG.color, FOG.near, FOG.far);
@@ -235,6 +263,58 @@ if (regenBtn)
     egeria.regenerate();
   });
 
+woodPieces?.addEventListener("input", () => {
+  driftwood.setPieces(+woodPieces.value);
+  driftwood.regenerate();
+});
+woodBranches?.addEventListener("input", () => {
+  driftwood.setBranches(+woodBranches.value);
+  driftwood.regenerate();
+});
+woodGnarl?.addEventListener("input", () => {
+  driftwood.setGnarl(+woodGnarl.value);
+  driftwood.regenerate();
+});
+woodTwist?.addEventListener("input", () => {
+  driftwood.setTwist(+woodTwist.value);
+  driftwood.regenerate();
+});
+woodDetail?.addEventListener("input", () => {
+  driftwood.setDetail(+woodDetail.value);
+  driftwood.regenerate();
+});
+woodGrain?.addEventListener("input", () =>
+  driftwood.setGrainFreq(+woodGrain.value)
+);
+woodGrainMix?.addEventListener("input", () =>
+  driftwood.setGrainMix(+woodGrainMix.value)
+);
+woodWarm?.addEventListener("input", () => driftwood.setWarm(+woodWarm.value));
+
+floorGravelMix?.addEventListener("input", () =>
+  floor.setGravelMix(+floorGravelMix.value)
+);
+floorAmp?.addEventListener("input", () => floor.setAmp(+floorAmp.value));
+floorGravelScale?.addEventListener("input", () =>
+  floor.setGravelScale(+floorGravelScale.value)
+);
+floorGravelBump?.addEventListener("input", () =>
+  floor.setGravelBump(+floorGravelBump.value)
+);
+
+palSand?.addEventListener(
+  "change",
+  () => palSand.checked && floor.setPalette("sand")
+);
+palGrey?.addEventListener(
+  "change",
+  () => palGrey.checked && floor.setPalette("grey")
+);
+palRainbow?.addEventListener(
+  "change",
+  () => palRainbow.checked && floor.setPalette("rainbow")
+);
+
 /* ---------- Render loop ---------- */
 let last = performance.now(),
   frames = 0,
@@ -277,23 +357,39 @@ let last = performance.now(),
   FOG.far = 2.0 + 1.9 * cam.r;
 
   // Current direction from UI
-  const ang = parseFloat(currentAngle?.value ?? "0"); // <-- define angle
+  const ang =
+    typeof currentAngle === "number"
+      ? currentAngle
+      : parseFloat(currentAngle?.value ?? "0");
+  const strength =
+    typeof currentStrength === "number"
+      ? currentStrength
+      : parseFloat(currentStrength?.value ?? "0.6");
   const dir = [Math.cos(ang), Math.sin(ang)];
+
+  const fp = floor.getParams
+    ? floor.getParams()
+    : { amp: 0.18, scale: 0.9, yOffset: -0.03 };
 
   const shared = {
     proj,
     view,
     time: t,
-    currentStrength: parseFloat(currentStrength?.value ?? "0.6"),
+    currentStrength: strength,
     currentDir: dir,
     res: [canvas.width, canvas.height],
     fogColor: FOG.color,
     fogNear: FOG.near,
     fogFar: FOG.far,
+    floorAmp: fp.amp,
+    floorScale: fp.scale,
+    floorYOffset: fp.yOffset,
   };
 
   // draw
   floor.draw(shared);
+  if (showWood?.checked !== false) driftwood.draw(shared);
   if (showGrass?.checked !== false) grass.draw(shared);
   if (showEgeria?.checked !== false) egeria.draw(shared);
+  if (showBarclaya?.checked !== false) barclaya.draw(shared);
 })();
