@@ -2,7 +2,6 @@ import { vs, fs } from "./goldfishShaders.js";
 import { CatmullRomSpline3D } from "./SplineVec3.js";
 
 // ---------- BASIC GEOMETRY FUNCTIONS
-
 function create_subdiv_box(positions, indices, colors, subX, subY, subZ, sizeX, sizeY, sizeZ) {
   let currentIndex = positions.length / 3;
   let all_idx = [];
@@ -104,7 +103,7 @@ function create_subdiv_box(positions, indices, colors, subX, subY, subZ, sizeX, 
 }
 
 // Creates ring in a clockwise manner, returns indices of new points
-function create_ring(positions, indices, colors, numVerts, radX, radY, translate = {}) {
+function create_ring(positions, indices, colors, numVerts, radX, radY, translate = {}, color = null) {
   let PI2 = Math.PI * 2.0;
   let radInc = PI2 / numVerts;
   let curAngle = 0.0;
@@ -122,8 +121,11 @@ function create_ring(positions, indices, colors, numVerts, radX, radY, translate
       translate.z
     );
 
-    colors.push(1.0, 0.0, 0.0);
-    
+    if (color == null)
+      colors.push(1.0, 0.0, 0.0);
+    else
+      colors.push(color.r, color.g, color.b);
+
     newIndices.push(curIndex);
     
     curAngle += radInc;
@@ -134,7 +136,7 @@ function create_ring(positions, indices, colors, numVerts, radX, radY, translate
 }
 
 // extrudes from ring geometry, and creates bridging faces
-function extrude_ring(positions, indices, orig_ring_indices, colors, offset) {
+function extrude_ring(positions, indices, orig_ring_indices, colors, offset, color = null) {
     let numSegments = orig_ring_indices.length;
     let startNewIndex = positions.length / 3; // Index of the first NEW vertex
     let newIndices = [];
@@ -159,7 +161,11 @@ function extrude_ring(positions, indices, orig_ring_indices, colors, offset) {
             origPoint.z + offset.z
         );
 
-        colors.push(1.0, 0.0, 0.0);
+        if (color == null)
+          colors.push(1.0, 0.0, 0.0);
+        else
+          colors.push(color.r, color.g, color.b);
+
         newIndices.push(curExtIdx);
         
         // Triangle 1 (curOrig -> curExt -> nextOrig)
@@ -172,7 +178,7 @@ function extrude_ring(positions, indices, orig_ring_indices, colors, offset) {
     return newIndices;
 }
 
-function fill_ring_pole(positions, indices, orig_ring_indices, colors, offset, reverse) {
+function fill_ring_pole(positions, indices, orig_ring_indices, colors, offset, reverse, color = null) {
   let newIndex = positions.length / 3;
   let newIndices = [newIndex];
   let num_orig = orig_ring_indices.length;
@@ -211,12 +217,14 @@ function fill_ring_pole(positions, indices, orig_ring_indices, colors, offset, r
     avgY + offset.y,
     avgZ + offset.z
   );
-  colors.push(
-    0.0,
-    0.0,
-    1.0
-  );
-
+  if (color == null)
+    colors.push(
+      0.0,
+      0.0,
+      1.0
+    );
+  else 
+    colors.push(color.r, color.g, color.b);
   // return pole index
   return newIndices;
 }
@@ -358,7 +366,13 @@ function translate(positions, translated_verts, offset) {
   return;  
 }
 
-function create_ring_spline(positions, indices, colors, num_verts_ring, numRings, posCtrlPts, scaleCtrlPts, endPoleOffset, beginPoleOffset) {
+function create_ring_spline(
+  positions, indices, colors, 
+  num_verts_ring, numRings, 
+  posCtrlPts, scaleCtrlPts, 
+  endPoleOffset, beginPoleOffset, 
+  color = null
+) {
   const posPath = new CatmullRomSpline3D(
     posCtrlPts,
     0.5
@@ -375,6 +389,8 @@ function create_ring_spline(positions, indices, colors, num_verts_ring, numRings
   let prevScale = [];
   let prevLoopIdx = [];
   let curLoopIdx = [];
+  // check this in the future. i < 1.0 creates wrong scale at the end
+  // i < 0.9 fixes this
   for (let i = 0.0; i <= 1.0; i += (1.0 / numRings)) {
     let pos = posPath.getPoint(i);
     let scale = scalePath.getPoint(i);
@@ -383,7 +399,8 @@ function create_ring_spline(positions, indices, colors, num_verts_ring, numRings
     if (i < (0.5 / numRings)) {
       curLoopIdx = create_ring(
         positions, indices, colors, num_verts_ring, 
-        scale[0], scale[1], {x: pos[0], y: pos[1], z: pos[2]}
+        scale[0], scale[1], {x: pos[0], y: pos[1], z: pos[2]},
+        color
       );
       all_idx.push(...curLoopIdx);
       orig_ring = curLoopIdx;
@@ -392,7 +409,8 @@ function create_ring_spline(positions, indices, colors, num_verts_ring, numRings
       // extrude ring to desired position with desired scale
       curLoopIdx = extrude_ring(
         positions, indices, prevLoopIdx, colors,
-        {x: pos[0] - prevPos[0], y: pos[1] - prevPos[1], z: pos[2] - prevPos[2]}
+        {x: pos[0] - prevPos[0], y: pos[1] - prevPos[1], z: pos[2] - prevPos[2]},
+        color
       );
 
       scale_around_point(
@@ -408,69 +426,233 @@ function create_ring_spline(positions, indices, colors, num_verts_ring, numRings
     prevScale = scale;
   }
 
-  let orig_pole_idx = fill_ring_pole(positions, indices, orig_ring, colors, beginPoleOffset, true);
-  let end_pole_idx = fill_ring_pole(positions, indices, curLoopIdx, colors, endPoleOffset, true);
+  let orig_pole_idx = fill_ring_pole(positions, indices, orig_ring, colors, beginPoleOffset, true, color);
+  let end_pole_idx = fill_ring_pole(positions, indices, curLoopIdx, colors, endPoleOffset, true, color);
   all_idx.push(...orig_pole_idx, ...end_pole_idx);
   
   return all_idx;
 }
 
+// Debug Tools
+function sphere(positions, indices, colors, offset = {}, color = null) {
+  // --- Control Points for Sphere Shape ---
+  const NUM_RING_VERTS = 8;
+  const NUM_RINGS = 2;
+
+  // The path runs vertically (along the Y-axis)
+  const posCtrlPts = [
+      [0 + offset.x, 0 + offset.y, 0 + offset.z - 0.0625], // Start control point (top)
+      [0 + offset.x, 0 + offset.y, 0.0625 + offset.z - 0.0625],   // Equator/center
+      [0 + offset.x, 0 + offset.y, 0.13 + offset.z - 0.0625]  // End control point (bottom)
+  ];
+
+  // The scale profile (Radius for X and Y)
+  // Note: Catmull-Rom requires 3 control points for a single segment, or 5+ for a full smooth path.
+  // Using 5 points to ensure smooth ramp-up/down.
+  const scaleCtrlPts = [
+      [0.04, 0.04, 1.0], // Pre-start (near zero radius)
+      [0.09, 0.09, 1.0],   // Equator radius
+      [0.04, 0.04, 1.0]  // Post-end (near zero radius)
+  ];
+
+  // Pole positions (Y-axis)
+  const beginPoleOffset = {x: 0.0, y: 0.0, z: -0.02};
+  const endPoleOffset = {x: 0.0, y: 0.0, z: 0.02};
+  const sphereColor = {r: 0.8, g: 0.2, b: 0.1}; // A reddish color
+
+  // --- Function Call ---
+  const sphereIndices = create_ring_spline(
+      positions, 
+      indices, 
+      colors, 
+      NUM_RING_VERTS, 
+      NUM_RINGS, 
+      posCtrlPts, 
+      scaleCtrlPts, 
+      endPoleOffset, 
+      beginPoleOffset, 
+      color == null? sphereColor : color
+  );
+  return sphereIndices;
+}
+
 // ---------- GOLDFISH BODY PART GENERATORS. PASS POS/IDX ARRAYS BY REFERENCE FOR UPDATE
-function gfish_head(positions, indices, colors) {
+function gfish_body(positions, indices, colors, length, height, width, belly, arch, 
+    pectoral_pos, pectoralShift, 
+    pelvic_pos, pelvicShift, 
+    afin_pos, 
+    dorsal_pos, dorsalShift, 
+    caudal_pos, 
+    head_pos  
+) {
+  // use spline with radius value, interpolate with even rings for body
+  let all_idx = [];
+  all_idx = create_ring_spline(
+    positions, indices, colors,
+    8, // num verts in a ring
+    10,// num rings in spline
+    [  // position spline
+      [0.0, 1.0 - arch, 0.0],
+      [0.0, 1.02 - (arch * 0.5), length * 0.4],
+      [0.0, 1.03, length * 0.7],
+      [0.0, 1.035, length]
+    ], 
+    [  // scale spline
+      [width * 0.3, height * 0.5, 1.0],
+      [width * 0.45, height, 1.0],
+      [width * 0.35, height * 0.52, 1.0],
+      [width * 0.2, height * 0.25, 1.0]
+    ],
+    {x: 0, y: 0, z: 0.0}, //end pole offset
+    {x: 0, y: 0, z: -0.025}  //begin pole offset
+  );
+
+  caudal_pos = {x: 0.0, y: 1.035, z: length + dorsalShift};
+  let caudal_idx = sphere(positions, indices, colors, caudal_pos, {r: 0.0, g: 1.0, b: 0.0});
+  all_idx.push(...caudal_idx);
+
+  head_pos = {x: 0.0, y: 1.0 - arch, z: 0.0};
+  let head_idx = sphere(positions, indices, colors, head_pos, {r: 0.0, g: 1.0, b: 0.0});
+  all_idx.push(...head_idx);
+
+  // TODO: create copy of body and pos spline to get positions along body of various fins
+  // Also take in "angle" params for pectoral and pelvic fins
+  
+  // dorsal_pos;
+  // dorsalShift
+
+  // afin_pos; 
+
+  // pectoral_pos = {r: {}, l: {}}; 
+  // pectoralShift;
+
+  // pelvic_pos = {r: {}, l: {}}; 
+  // pelvicShift; 
+
+  
+  return all_idx;
+}
+
+const eye_types = {
+  BULGE: "BULGE",
+  GOOGLY: "GOOGLY",
+  CHEEKS: "CHEEKS",
+  BUBBLY: "BUBBLY" 
+};
+function gfish_head(positions, indices, colors, size = {}, eyeType, mouthTilt) {
   // ring, extrude while scaling down
   // end cap with special mouth geo function
   return;
 }
 
-function gfish_body(positions, indices, colors) {
-  // use spline with radius value, interpolate with even rings for body
-  let all_idx = [];
-  all_idx = create_ring_spline(
-    positions, indices, colors, 
-    8, // num verts in a ring 
-    10,// num rings in spline
-    [  // position spline
-      [0.0, 1.0, 0.0],
-      [0.0, 1.02, 0.2],
-      [0.0, 1.035, 0.35],
-      [0.0, 1.035, 0.45]
-    ], 
-    [  // scale spline
-      [0.03, 0.04, 1.0],
-      [0.06, 0.07, 1.0],
-      [0.03, 0.05, 1.0],
-      [0.01, 0.02, 1.0]
-    ],
-    {x: 0, y: 0, z: 0.0}, //end pole offset
-    {x: 0, y: 0, z: -0.025}  //begin pole offset
-  );
-  return all_idx;
-}
-
-function gfish_caudal(positions, indices, colors) {
+const caudal_types = {
+  DROOPY: "DROOPY",
+  VSLOPE: "VSLOPE",
+  FEATHERY: "FEATHERY",
+  VBUTT: "VBUTT",
+  BUTTERFLY: "BUTTERFLY"
+};
+function gfish_caudal(positions, indices, colors, length, width, caudalType) {
   // cube (/loop) with special deformation
-  let all_idx = create_subdiv_box(
+  /*let all_idx = create_subdiv_box(
     positions, indices, colors, 
     4, 4, 4, 1, 2, 3
-  );
-  return all_idx;
+  );*/
+  return;
 }
 
-function gfish_dorsal(positions, indices, colors) {
+const dorsal_types = {
+  MANE: "MANE",
+  PUNK: "PUNK",
+  SWEPT: "SWEPT"
+};
+function gfish_dorsal(positions, indices, colors, length, width, dorsalType) {
   // cube (/loop) with special deformation, maybe follow spline
   return;
 }
 
-function gfish_pectoral(positions, indices, colors) {
-  // subdiv cube with fun values
+function gfish_pelvic(positions, indices, colors, length, width, pos) {
   return;
 }
 
-function gfish_anal_fin(positions, indices, colors) {
+function gfish_pectoral(positions, indices, colors, length, width, pos) {
+  // subdiv cube with fun values
+  let all_idx = [];
+  all_idx = create_ring_spline(
+    positions, indices, colors, 
+    6, // num verts in a ring 
+    4,// num rings in spline
+    [  // position spline
+      [0.0, 1.0, 0.0],
+      [0.0, 1.0, 0.2],
+      [0.0, 1.03, 0.3],
+      [0.0, 1.0, 0.4]
+    ], 
+    [  // scale spline
+      [0.02, 0.01, 1.0],
+      [0.02, 0.01, 1.0],
+      [0.07, 0.01, 1.0],
+      [0.04, 0.01, 1.0]
+    ],
+    {x: 0, y: 0, z: 0.03}, //end pole offset
+    {x: 0, y: 0, z: 0.0}  //begin pole offset
+  );
+  return all_idx;
+}
+
+const afin_types = {
+  SPIKY: "SPIKY",
+  FEATHERY: "FEATHERY"
+};
+function gfish_anal_fin(positions, indices, colors, length, width, afinType, pos) {
   // same as dorsal, but smaller and probably less variety (all references looked the same here)
   return;
 }
 
+function goldfish(
+    positions, indices, colors,
+    // body params 
+    bodyLength, bodyHeight, bodyWidth, belly_size, arch,
+    // head params
+    headSize, eyeType, mouthTilt,
+    // caudal params
+    caudalLength, caudalWidth, caudalType,
+    // dorsal params
+    dorsalLength, dorsalWidth, dorsalShift, dorsalType,
+    // pelvic params
+    pelvicLength, pelvicWidth, pelvicShift,
+    // pectoral params
+    pectoralLength, pectoralWidth, pectoralShift,
+    // afin params
+    afinLength, afinWidth, afinType
+  ) {
+  let pectoral_pos = {r: {x: 0.0, y: 0.0, z: 0.0}, l: {x: 0.0, y: 0.0, z: 0.0}};
+  let pelvic_pos = {r: {x: 0.0, y: 0.0, z: 0.0}, l: {x: 0.0, y: 0.0, z: 0.0}};
+  let afin_pos = {x: 0.0, y: 0.0, z: 0.0};
+  let dorsal_pos = {x: 0.0, y: 0.0, z: 0.0};
+  let caudal_pos = {x: 0.0, y: 0.0, z: 0.0};
+  let head_pos = {x: 0.0, y: 0.0, z: 0.0};
+
+  gfish_body(
+    positions, indices, colors, 
+    bodyLength, bodyHeight, bodyWidth, belly_size, arch,
+    pectoral_pos, pectoralShift, 
+    pelvic_pos, pelvicShift, 
+    afin_pos, 
+    dorsal_pos, dorsalShift, 
+    caudal_pos, 
+    head_pos  
+  );
+  // gfish_head(positions, indices, colors, headSize, eyeType, mouthTilt);
+  // gfish_caudal(positions, indices, colors, caudalLength, caudalWidth, caudalType);
+  // gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalType);
+  // gfish_pelvic(positions, indices, colors, pelvicLength, pelvicWidth, pelvic_pos);
+  // gfish_pectoral(positions, indices, colors, pectoralLength, pectoralWidth, pectoral_pos);
+  // gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinType, afin_pos);
+  return;
+}
+
+// functions to prepare data for GPU
 function compile(gl, type, src) {
   const sh = gl.createShader(type);
   gl.shaderSource(sh, src);
@@ -498,51 +680,120 @@ function makeProgram(gl, vsSrc, fsSrc, bindings) {
 // ---------- Geometry: Calls on fcns for head, body, caudal fin, dorsal fin, pectoral fin, pelvic fin, anal fin
 function createFishGeometry(gl) {
   const positions = [];
-  //const uvs = []; // probably will not use these for fish. Will instead opt for 3D noise functions and solid coloring
   const indices = [];
   const colors = [];
 
-  gfish_body(positions, indices, colors);
-  //gfish_caudal(positions, indices, colors);
+  goldfish(
+    positions, indices, colors,
+    // body params
+    0.5, 0.5, 1.0, 1.0, 0.0,
+    // head params
+    {x: 1.0, y: 1.0}, eye_types.GOOGLY, 0.5,
+    // caudal params
+    1.0, 1.0, caudal_types.BUTTERFLY,
+    // dorsal params
+    1.0, 1.0, 0.0, dorsal_types.PUNK,
+    // pelvic params
+    1.0, 1.0, 0.0,
+    // pectoral params
+    1.0, 1.0, 0.0,
+    // afin params
+    1.0, 1.0, afin_types.FEATHERY
+  );
 
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
   
-  function buf(data, attrib, size, type = gl.FLOAT, divisor = 0) {
-    const b = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, b);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
-    const loc = attrib;
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, size, type, false, 0, 0);
-    if (divisor) gl.vertexAttribDivisor(loc, divisor);
-    return b;
-  }
-
   // Attribute locations (hard-coded to match shader order)
   const vs_Pos_loc = 0;
   const vs_Col_loc = 1;
 
-  gl.bindVertexArray(vao);
-  buf(positions, vs_Pos_loc, 3);
-  buf(colors, vs_Col_loc, 3);
-
+  // Create VBOs and IBO
+  const posBuffer = gl.createBuffer();
+  const colorBuffer = gl.createBuffer();
   const ibo = gl.createBuffer();
+  
+  // Helper to setup/bind buffers initially
+  function setupBuffer(buffer, data, attribLoc, size, type = gl.FLOAT, usage = gl.DYNAMIC_DRAW) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), usage);
+    gl.enableVertexAttribArray(attribLoc);
+    gl.vertexAttribPointer(attribLoc, size, type, false, 0, 0);
+  }
+
+  gl.bindVertexArray(vao);
+  setupBuffer(posBuffer, positions, vs_Pos_loc, 3);
+  setupBuffer(colorBuffer, colors, vs_Col_loc, 3);
+
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
   gl.bufferData(
     gl.ELEMENT_ARRAY_BUFFER,
     new Uint16Array(indices),
-    gl.STATIC_DRAW
+    gl.DYNAMIC_DRAW // Use DYNAMIC_DRAW since the data will change
   );
 
   return {
     vao,
+    posBuffer,
+    colorBuffer,
+    ibo,
     count: indices.length,
-    attribs: {
-      vs_Pos : 0,
-      vs_Col : 1
-    },
+    attribs: { vs_Pos : vs_Pos_loc, vs_Col : vs_Col_loc },
+    // Store initial params so we can easily see what was used last
+    params: {
+        bodyLength: 0.5, bodyHeight: 0.5, bodyWidth: 1.0, belly_size: 1.0, arch: 0.0,
+        headSize: {x: 1.0, y: 1.0}, eyeType: eye_types.GOOGLY, mouthTilt: 0.5,
+        caudalLength: 1.0, caudalWidth: 1.0, caudalType: caudal_types.BUTTERFLY,
+        dorsalLength: 1.0, dorsalWidth: 1.0, dorsalShift: 0.0, dorsalType: dorsal_types.PUNK,
+        pelvicLength: 1.0, pelvicWidth: 1.0, pelvicShift: 0.0,
+        pectoralLength: 1.0, pectoralWidth: 1.0, pectoralShift: 0.0,
+        afinLength: 1.0, afinWidth: 1.0, afinType: afin_types.FEATHERY
+    }
   };
+}
+
+export function regenerateGoldfishGeometry(gl, gfish, newParams) {
+    const positions = [];
+    const indices = [];
+    const colors = [];
+
+    // 1. Call the geometry generation function with the new parameters
+    goldfish(
+        positions, indices, colors,
+        newParams.bodyLength, newParams.bodyHeight, newParams.bodyWidth, newParams.belly_size, newParams.arch,
+        newParams.headSize, newParams.eyeType, newParams.mouthTilt,
+        newParams.caudalLength, newParams.caudalWidth, newParams.caudalType,
+        newParams.dorsalLength, newParams.dorsalWidth, newParams.dorsalShift, newParams.dorsalType,
+        newParams.pelvicLength, newParams.pelvicWidth, newParams.pelvicShift,
+        newParams.pectoralLength, newParams.pectoralWidth, newParams.pectoralShift,
+        newParams.afinLength, newParams.afinWidth, newParams.afinType
+    );
+
+    // 2. Update the GPU buffers (VBOs and IBO)
+    // Bind the VAO first
+    gl.bindVertexArray(gfish.vao);
+
+    // Update Positions VBO
+    gl.bindBuffer(gl.ARRAY_BUFFER, gfish.posBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.DYNAMIC_DRAW);
+
+    // Update Colors VBO
+    gl.bindBuffer(gl.ARRAY_BUFFER, gfish.colorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.DYNAMIC_DRAW);
+
+    // Update Indices IBO
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gfish.ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.DYNAMIC_DRAW);
+
+    // 3. Update the draw count and stored parameters
+    gfish.count = indices.length;
+    gfish.params = newParams;
+
+    // Unbind VAO for safety
+    gl.bindVertexArray(null);
+
+    // The existing gfish object (which holds the VAO, buffers, and count) is updated by reference.
+    // The draw loop will now use the new geometry data and new count.
 }
 
 // ---------- Main initialization and animation export
@@ -590,6 +841,7 @@ export function createGoldfish(gl) {
           1
         );
       },
+      geometry: gfish
     };
   
   /*

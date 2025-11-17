@@ -27,6 +27,9 @@
         padding: 12px 16px;
         border-left: 1px solid rgba(255, 255, 255, 0.1);
         background: #0a233b;
+        height: 100vh;
+        overflow-y: scroll;
+        padding: 10px;
       }
       h1 {
         font-size: 16px;
@@ -138,6 +141,139 @@
           value="1.0"
         />
         <button class="btn" id="scatter">Scatter plants</button>
+
+
+
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+            Fish
+        </h2>
+
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+            Body Characteristics
+        </h2>
+        <div style="margin-left: 15px;">
+            <label> Body Length </label>
+            <input id="bodyLength" type="range" min="0.2" max="1.5" step="0.05" value="0.5" />
+            <label> Body Height </label>
+            <input id="bodyHeight" type="range" min="0.1" max="1.5" step="0.05" value="0.5" />
+            <label> Body Width </label>
+            <input id="bodyWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <label> Belly Size </label>
+            <input id="belly_size" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <label> Arch </label>
+            <input id="arch" type="range" min="-0.5" max="0.5" step="0.05" value="0.0" />
+        </div>
+
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+            Head Characteristics
+        </h2>
+        <div style="margin-left: 15px;">
+            <label> Head Size </label>
+            <input id="headSize" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            
+            <label style="font-weight: bold;"> Eye Type </label>
+            <div id="eyeType-container" style="margin-left: 20px;">
+                <input type="radio" id="eyeType-BULGE" name="eyeType" value="BULGE">
+                <label for="eyeType-BULGE">Bulging</label>
+                <input type="radio" id="eyeType-GOOGLY" name="eyeType" value="GOOGLY" checked>
+                <label for="eyeType-GOOGLY">Googly</label>
+                <input type="radio" id="eyeType-CHEEKS" name="eyeType" value="CHEEKS">
+                <label for="eyeType-CHEEKS">Cheeks</label>
+                <input type="radio" id="eyeType-BUBBLY" name="eyeType" value="BUBBLY">
+                <label for="eyeType-BUBBLY">Bubbly</label>
+            </div>
+            
+            <label> Mouth Tilt </label>
+            <input id="mouthTilt" type="range" min="-0.5" max="0.5" step="0.05" value="0.5" />
+        </div>
+
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+            Caudal Fin Characteristics
+        </h2>
+        <div style="margin-left: 15px;">
+            <label> Caudal Length </label>
+            <input id="caudalLength" type="range" min="0.5" max="3.0" step="0.1" value="1.0" />
+            <label> Caudal Width </label>
+            <input id="caudalWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            
+            <label style="font-weight: bold;"> Caudal Type </label>
+            <div id="caudalType-container" style="margin-left: 20px;">
+                <input type="radio" id="caudalType-DROOPY" name="caudalType" value="DROOPY">
+                <label for="caudalType-DROOPY">Droopy</label>
+                <input type="radio" id="caudalType-VSLOPE" name="caudalType" value="VSLOPE">
+                <label for="caudalType-VSLOPE">V-Slope</label>
+                <input type="radio" id="caudalType-FEATHERY" name="caudalType" value="FEATHERY">
+                <label for="caudalType-FEATHERY">Feathery</label>
+                <input type="radio" id="caudalType-VBUTT" name="caudalType" value="VBUTT">
+                <label for="caudalType-VBUTT">V-Butt</label>
+                <input type="radio" id="caudalType-BUTTERFLY" name="caudalType" value="BUTTERFLY" checked>
+                <label for="caudalType-BUTTERFLY">Butterfly</label>
+            </div>
+        </div>
+
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+            Dorsal Fin Characteristics
+        </h2>
+        <div style="margin-left: 15px;">
+            <label> Dorsal Length </label>
+            <input id="dorsalLength" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <label> Dorsal Width </label>
+            <input id="dorsalWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <label> Dorsal Shift </label>
+            <input id="dorsalShift" type="range" min="-0.5" max="0.5" step="0.05" value="0.0" />
+            
+            <label style="font-weight: bold;"> Dorsal Type </label>
+            <div id="dorsalType-container" style="margin-left: 20px;">
+                <input type="radio" id="dorsalType-MANE" name="dorsalType" value="MANE">
+                <label for="dorsalType-MANE">Mane</label>
+                <input type="radio" id="dorsalType-PUNK" name="dorsalType" value="PUNK" checked>
+                <label for="dorsalType-PUNK">Punk</label>
+                <input type="radio" id="dorsalType-SWEPT" name="dorsalType" value="SWEPT">
+                <label for="dorsalType-SWEPT">Swept</label>
+            </div>
+        </div>
+
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+            Pelvic Fin Characteristics
+        </h2>
+        <div style="margin-left: 15px;">
+            <label> Pelvic Length </label>
+            <input id="pelvicLength" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <label> Pelvic Width </label>
+            <input id="pelvicWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <label> Pelvic Shift </label>
+            <input id="pelvicShift" type="range" min="-0.5" max="0.5" step="0.05" value="0.0" />
+        </div>
+
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+            Pectoral Fin Characteristics
+        </h2>
+        <div style="margin-left: 15px;">
+            <label> Pectoral Length </label>
+            <input id="pectoralLength" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <label> Pectoral Width </label>
+            <input id="pectoralWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <label> Pectoral Shift </label>
+            <input id="pectoralShift" type="range" min="-0.5" max="0.5" step="0.05" value="0.0" />
+        </div>
+
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+            Anal Fin Characteristics
+        </h2>
+        <div style="margin-left: 15px;">
+            <label> Anal Fin Length </label>
+            <input id="afinLength" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <label> Anal Fin Width </label>
+            <input id="afinWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            
+            <label style="font-weight: bold;"> Anal Fin Type </label>
+            <div id="afinType-container" style="margin-left: 20px;">
+                <input type="radio" id="afinType-SPIKY" name="afinType" value="SPIKY">
+                <label for="afinType-SPIKY">Spiky</label>
+                <input type="radio" id="afinType-FEATHERY" name="afinType" value="FEATHERY" checked>
+                <label for="afinType-FEATHERY">Feathery</label>
+            </div>
+        </div>
       </aside>
     </div>
     <script type="module" src="./src/main.js"></script>
