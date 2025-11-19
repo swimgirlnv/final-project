@@ -434,30 +434,30 @@ function create_ring_spline(
 }
 
 // Debug Tools
-function sphere(positions, indices, colors, offset = {}, color = null) {
+function sphere(positions, indices, colors, offset = {}, color = null, size = 1.0) {
   // --- Control Points for Sphere Shape ---
   const NUM_RING_VERTS = 8;
   const NUM_RINGS = 2;
 
   // The path runs vertically (along the Y-axis)
   const posCtrlPts = [
-      [0 + offset.x, 0 + offset.y, 0 + offset.z - 0.0625], // Start control point (top)
-      [0 + offset.x, 0 + offset.y, 0.0625 + offset.z - 0.0625],   // Equator/center
-      [0 + offset.x, 0 + offset.y, 0.13 + offset.z - 0.0625]  // End control point (bottom)
+      [0 + offset.x, 0 + offset.y, 0 + offset.z - 0.0625 * Math.pow(size, 0.5)], // Start control point (top)
+      [0 + offset.x, 0 + offset.y, 0.0625 * Math.pow(size, 0.5) + offset.z - 0.0625 * Math.pow(size, 0.5)],   // Equator/center
+      [0 + offset.x, 0 + offset.y, 0.13 * Math.pow(size, 0.5) + offset.z - 0.0625 * Math.pow(size, 0.5)]  // End control point (bottom)
   ];
 
   // The scale profile (Radius for X and Y)
   // Note: Catmull-Rom requires 3 control points for a single segment, or 5+ for a full smooth path.
   // Using 5 points to ensure smooth ramp-up/down.
   const scaleCtrlPts = [
-      [0.04, 0.04, 1.0], // Pre-start (near zero radius)
-      [0.09, 0.09, 1.0],   // Equator radius
-      [0.04, 0.04, 1.0]  // Post-end (near zero radius)
+      [0.04 * size, 0.04 * size, 1.0], // Pre-start (near zero radius)
+      [0.06 * size, 0.06 * size, 1.0],   // Equator radius
+      [0.04 * size, 0.04 * size, 1.0]  // Post-end (near zero radius)
   ];
 
   // Pole positions (Y-axis)
-  const beginPoleOffset = {x: 0.0, y: 0.0, z: -0.02};
-  const endPoleOffset = {x: 0.0, y: 0.0, z: 0.02};
+  const beginPoleOffset = {x: 0.0, y: 0.0, z: -0.02 * size};
+  const endPoleOffset = {x: 0.0, y: 0.0, z: 0.02 * size};
   const sphereColor = {r: 0.8, g: 0.2, b: 0.1}; // A reddish color
 
   // --- Function Call ---
@@ -508,11 +508,11 @@ function gfish_body(positions, indices, colors, length, height, width, belly, ar
   );
 
   caudal_pos = {x: 0.0, y: 1.035, z: length + dorsalShift};
-  let caudal_idx = sphere(positions, indices, colors, caudal_pos, {r: 0.0, g: 1.0, b: 0.0});
+  let caudal_idx = sphere(positions, indices, colors, caudal_pos, {r: 0.0, g: 1.0, b: 0.0}, belly);
   all_idx.push(...caudal_idx);
 
   head_pos = {x: 0.0, y: 1.0 - arch, z: 0.0};
-  let head_idx = sphere(positions, indices, colors, head_pos, {r: 0.0, g: 1.0, b: 0.0});
+  let head_idx = sphere(positions, indices, colors, head_pos, {r: 0.0, g: 1.0, b: 0.0}, belly);
   all_idx.push(...head_idx);
 
   // TODO: create copy of body and pos spline to get positions along body of various fins
@@ -542,6 +542,7 @@ const eye_types = {
 function gfish_head(positions, indices, colors, size = {}, eyeType, mouthTilt) {
   // ring, extrude while scaling down
   // end cap with special mouth geo function
+  eye1_idx = sphere(positions, indices, colors, );
   return;
 }
 
