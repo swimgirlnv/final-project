@@ -122,11 +122,15 @@ const dorsalShift = document.getElementById("dorsalShift");
 const pelvicLength = document.getElementById("pelvicLength");
 const pelvicWidth = document.getElementById("pelvicWidth");
 const pelvicShift = document.getElementById("pelvicShift");
+const pelvicAngle = document.getElementById("pelvicAngle");
 const pectoralLength = document.getElementById("pectoralLength");
 const pectoralWidth = document.getElementById("pectoralWidth");
 const pectoralShift = document.getElementById("pectoralShift");
+const pectoralAngle = document.getElementById("pectoralAngle");
 const afinLength = document.getElementById("afinLength");
 const afinWidth = document.getElementById("afinWidth");
+const afinShift = document.getElementById("afinShift");
+const afinAngle = document.getElementById("afinAngle");
 
 // Radio groups (must use name)
 const eyeTypeGroup = document.getElementsByName("eyeType");
@@ -174,16 +178,20 @@ function readGoldfishParams() {
         pelvicLength: parseFloat(pelvicLength.value),
         pelvicWidth: parseFloat(pelvicWidth.value),
         pelvicShift: parseFloat(pelvicShift.value),
+        pelvicAngle: parseFloat(pelvicAngle.value),
         
         // pectoral params
         pectoralLength: parseFloat(pectoralLength.value),
         pectoralWidth: parseFloat(pectoralWidth.value),
         pectoralShift: parseFloat(pectoralShift.value),
+        pectoralAngle: parseFloat(pectoralAngle.value),
         
         // afin params
         afinLength: parseFloat(afinLength.value),
         afinWidth: parseFloat(afinWidth.value),
-        afinType: getRadioValue(afinTypeGroup)
+        afinType: getRadioValue(afinTypeGroup),
+        afinShift: parseFloat(afinShift.value),
+        afinAngle: parseFloat(afinAngle.value)
     };
 }
 
@@ -202,9 +210,9 @@ function initGoldfishUI() {
         headSize, mouthTilt,
         caudalLength, caudalWidth,
         dorsalLength, dorsalWidth, dorsalShift,
-        pelvicLength, pelvicWidth, pelvicShift,
-        pectoralLength, pectoralWidth, pectoralShift,
-        afinLength, afinWidth
+        pelvicLength, pelvicWidth, pelvicShift, pelvicAngle,
+        pectoralLength, pectoralWidth, pectoralShift, pectoralAngle,
+        afinLength, afinWidth, afinShift, afinAngle
     ];
     sliders.forEach(slider => {
         if (slider) {
