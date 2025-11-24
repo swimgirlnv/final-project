@@ -36,25 +36,25 @@ function createFishGeometry(gl) {
     positions, indices, colors,
     // body params
     // bodyLength, bodyHeight, bodyWidth, belly_size, arch
-    0.5, 0.5, 1.0, 1.0, 0.0,
+    0.5, 0.5, 1.0, 0.0,
     // head params
     // headSize, eyeType, mouthTilt
-    {x: 1.0, y: 1.0}, eye_types.GOOGLY, 0.5,
+    {x: 0.5, y: 0.5, z: 0.5}, eye_types.GOOGLY, 0.0,
     // caudal params
     // caudalLength, caudalWidth, caudalType, caudalAngle
-    1.0, 1.0, caudal_types.BUTTERFLY, Math.PI2 / 2.0,
+    1.0, 1.0, caudal_types.BUTTERFLY,
     // dorsal params
     // dorsalLength, dorsalWidth, dorsalShift, dorsalType
     1.0, 1.0, 0.0, dorsal_types.PUNK,
     // pelvic params
     // pelvicLength, pelvicWidth, pelvicShift, pelvicAngle
-    1.0, 1.0, 0.0, Math.PI2 / 2.0,
+    0.85, 1.0, 0.55, 0.0,
     // pectoral params
     // pectoralLength, pectoralWidth, pectoralShift, pectoralAngle
-    1.0, 1.0, 0.0, Math.PI2 / 2.0,
+    1.0, 1.0, 0.0, 0.0,
     // afin params
     // afinLength, afinWidth, afinType, afinShift, afinAngle
-    1.0, 1.0, afin_types.FEATHERY, 0.0, Math.PI2 / 2.0
+    1.0, 1.0, afin_types.FEATHERY, 0.0
   );
 
   const vao = gl.createVertexArray();
@@ -97,8 +97,8 @@ function createFishGeometry(gl) {
     attribs: { vs_Pos : vs_Pos_loc, vs_Col : vs_Col_loc },
     // Store initial params so we can easily see what was used last
     params: {
-        bodyLength: 0.5, bodyHeight: 0.5, bodyWidth: 1.0, belly_size: 1.0, arch: 0.0,
-        headSize: {x: 1.0, y: 1.0}, eyeType: eye_types.GOOGLY, mouthTilt: 0.5,
+        bodyLength: 0.5, bodyHeight: 0.5, bodyWidth: 1.0, arch: 0.0,
+        headSize: {x: 1.0, y: 1.0, z: 1.0}, eyeType: eye_types.GOOGLY, mouthTilt: 0.5,
         caudalLength: 1.0, caudalWidth: 1.0, caudalType: caudal_types.BUTTERFLY,
         dorsalLength: 1.0, dorsalWidth: 1.0, dorsalShift: 0.0, dorsalType: dorsal_types.PUNK,
         pelvicLength: 1.0, pelvicWidth: 1.0, pelvicShift: 0.0, pelvicAngle: Math.PI * 2.0 / 2.0, // ADD pelvicAngle
@@ -113,16 +113,18 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     const indices = [];
     const colors = [];
 
+    console.log(newParams);
+
     // 1. Call the geometry generation function with the new parameters
     goldfish(
         positions, indices, colors,
-        newParams.bodyLength, newParams.bodyHeight, newParams.bodyWidth, newParams.belly_size, newParams.arch,
+        newParams.bodyLength, newParams.bodyHeight, newParams.bodyWidth, newParams.arch,
         newParams.headSize, newParams.eyeType, newParams.mouthTilt,
-        newParams.caudalLength, newParams.caudalWidth, newParams.caudalType, newParams.caudalAngle, // ADD caudalAngle
+        newParams.caudalLength, newParams.caudalWidth, newParams.caudalType,
         newParams.dorsalLength, newParams.dorsalWidth, newParams.dorsalShift, newParams.dorsalType,
-        newParams.pelvicLength, newParams.pelvicWidth, newParams.pelvicShift, newParams.pelvicAngle, // ADD pelvicAngle
-        newParams.pectoralLength, newParams.pectoralWidth, newParams.pectoralShift, newParams.pectoralAngle, // ADD pectoralAngle
-        newParams.afinLength, newParams.afinWidth, newParams.afinType, newParams.afinShift, newParams.afinAngle // ADD afinShift, afinAngle
+        newParams.pelvicLength, newParams.pelvicWidth, newParams.pelvicShift, newParams.pelvicAngle,
+        newParams.pectoralLength, newParams.pectoralWidth, newParams.pectoralShift, newParams.pectoralAngle,
+        newParams.afinLength, newParams.afinWidth, newParams.afinType, newParams.afinShift
     );
 
     // 2. Update the GPU buffers (VBOs and IBO)

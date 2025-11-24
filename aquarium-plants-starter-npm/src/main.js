@@ -110,7 +110,6 @@ const regenBtn = document.getElementById("regenerate");
 const bodyLength = document.getElementById("bodyLength");
 const bodyHeight = document.getElementById("bodyHeight");
 const bodyWidth = document.getElementById("bodyWidth");
-const belly_size = document.getElementById("belly_size");
 const arch = document.getElementById("arch");
 const headSize = document.getElementById("headSize");
 const mouthTilt = document.getElementById("mouthTilt");
@@ -130,7 +129,6 @@ const pectoralAngle = document.getElementById("pectoralAngle");
 const afinLength = document.getElementById("afinLength");
 const afinWidth = document.getElementById("afinWidth");
 const afinShift = document.getElementById("afinShift");
-const afinAngle = document.getElementById("afinAngle");
 
 // Radio groups (must use name)
 const eyeTypeGroup = document.getElementsByName("eyeType");
@@ -155,11 +153,10 @@ function readGoldfishParams() {
         bodyLength: parseFloat(bodyLength.value),
         bodyHeight: parseFloat(bodyHeight.value),
         bodyWidth: parseFloat(bodyWidth.value),
-        belly_size: parseFloat(belly_size.value),
         arch: parseFloat(arch.value),
 
         // head params
-        headSize: { x: parseFloat(headSize.value), y: parseFloat(headSize.value) }, // Assuming headSize slider affects both X and Y equally for now
+        headSize: { x: parseFloat(headSize.value), y: parseFloat(headSize.value), z: parseFloat(headSize.value) }, // Assuming headSize slider affects both X and Y equally for now
         eyeType: getRadioValue(eyeTypeGroup),
         mouthTilt: parseFloat(mouthTilt.value),
         
@@ -190,8 +187,7 @@ function readGoldfishParams() {
         afinLength: parseFloat(afinLength.value),
         afinWidth: parseFloat(afinWidth.value),
         afinType: getRadioValue(afinTypeGroup),
-        afinShift: parseFloat(afinShift.value),
-        afinAngle: parseFloat(afinAngle.value)
+        afinShift: parseFloat(afinShift.value)
     };
 }
 
@@ -206,13 +202,13 @@ function regenerateGoldfish() {
 function initGoldfishUI() {
     // 1. Sliders (Input event fires continuously while dragging)
     const sliders = [
-        bodyLength, bodyHeight, bodyWidth, belly_size, arch,
+        bodyLength, bodyHeight, bodyWidth, arch,
         headSize, mouthTilt,
         caudalLength, caudalWidth,
         dorsalLength, dorsalWidth, dorsalShift,
         pelvicLength, pelvicWidth, pelvicShift, pelvicAngle,
         pectoralLength, pectoralWidth, pectoralShift, pectoralAngle,
-        afinLength, afinWidth, afinShift, afinAngle
+        afinLength, afinWidth, afinShift
     ];
     sliders.forEach(slider => {
         if (slider) {

@@ -21,18 +21,19 @@ import {
     sub,
     addVec,
     scaleVec,
-    apply_matrix_transform
+    apply_matrix_transform,
+    vec3
 } from "./linearTools.js";
 import { CatmullRomSpline3D } from "./splineVec3.js";
 
 // ---------- GOLDFISH BODY PART GENERATORS. PASS POS/IDX ARRAYS BY REFERENCE FOR UPDATE
-function gfish_body(positions, indices, colors, bodyLength, height, width, belly, arch, 
+function gfish_body(positions, indices, colors, bodyLength, height, width, arch, 
     pectoralInfoPacket, pectoralShift, pectoralAngle,
     pelvicInfoPacket, pelvicShift, pelvicAngle,
-    afin_pos, afinShift, afinAngle,
-    dorsal_pos, dorsalShift, 
     caudal_pos, 
-    head_pos  
+    head_pos, head_body_size,
+    posCtrlPoints_out,
+    scaleCtrlPoints_out  
 ) {
   const posCtrlPoints = 
   [  // position spline
@@ -41,6 +42,7 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, belly
     [0.0, 1.03, bodyLength * 0.7],
     [0.0, 1.035, bodyLength]
   ];
+  posCtrlPoints_out.push(...posCtrlPoints);
   const scaleCtrlPoints = 
   [  // scale spline
     [width * 0.3, height * 0.5, 1.0],
@@ -48,6 +50,7 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, belly
     [width * 0.35, height * 0.52, 1.0],
     [width * 0.2, height * 0.25, 1.0]
   ];
+  scaleCtrlPoints_out.push(...scaleCtrlPoints);
 
   // use spline with radius value, interpolate with even rings for body
   let all_idx = [];
@@ -57,21 +60,17 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, belly
     10,// num rings in spline
     posCtrlPoints, 
     scaleCtrlPoints,
-    {x: 0, y: 0, z: 0.0}, //end pole offset
-    {x: 0, y: 0, z: -0.025}  //begin pole offset
+    {x: 0.0, y: 0.0, z: bodyLength * 0.05}, //end pole offset
+    {x: 0.0, y: 0.0, z: -0.025}  //begin pole offset
   );
 
   caudal_pos.x = 0.0;
   caudal_pos.y = 1.035;
   caudal_pos.z = bodyLength;
-  let caudal_idx = sphere(positions, indices, colors, caudal_pos, {r: 0.0, g: 1.0, b: 0.0});
-  all_idx.push(...caudal_idx);
 
   head_pos.x = 0.0;
   head_pos.y = 1.0 - arch;
   head_pos.z = 0.0;
-  let head_idx = sphere(positions, indices, colors, head_pos, {r: 0.0, g: 1.0, b: 0.0});
-  all_idx.push(...head_idx);
 
   const posPath = new CatmullRomSpline3D(
     posCtrlPoints,
@@ -82,6 +81,12 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, belly
     scaleCtrlPoints,
     0.5
   );
+
+  // take scale for head start
+  let neck_scale = scalePath.getPoint(0.0);
+  head_body_size.x = neck_scale[0];
+  head_body_size.y = neck_scale[1];
+  head_body_size.z = neck_scale[2];
 
   function getDoubleFinInfo(finInfoPacket, shift, angle) {
     let finPos = posPath.getPoint(shift);
@@ -127,22 +132,11 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, belly
   getDoubleFinInfo(pectoralInfoPacket, pectoralShift, pectoralAngle);
   getDoubleFinInfo(pelvicInfoPacket, pelvicShift, pelvicAngle);
 
-  let pec_right_idx = sphere(positions, indices, colors, pectoralInfoPacket.r.pos, {r: 0.0, g: 1.0, b: 0.0});
-  all_idx.push(...pec_right_idx);
-  let pec_left_idx = sphere(positions, indices, colors, pectoralInfoPacket.l.pos, {r: 0.0, g: 1.0, b: 0.0});
-  all_idx.push(...pec_left_idx);
-
   let pelvPos = posPath.getPoint(pelvicShift);
   let pelvScale = scalePath.getPoint(pelvicShift);
 
-  let afPos = posPath.getPoint(); // replace with afin_shift
-  let afScale = scalePath.getPoint(); //
-
   // set positions of fins using input angle
 
-  // TODO: create copy of body and pos spline to get positions along body of various fins
-  // Also take in "angle" params for pectoral and pelvic fins
-  
   // dorsal_pos;
   // dorsalShift
 
@@ -272,56 +266,204 @@ export const eye_types = {
   CHEEKS: "CHEEKS",
   BUBBLY: "BUBBLY" 
 };
-function gfish_head(positions, indices, colors, headPos, size = {}, eyeType, mouthTilt = 0.0) {
+function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}, eyeType, mouthTilt = 0.0) {
   // ring, extrude while scaling down
   const numVertsRing = 8;
 
   let posCtrlPoints = 
   [  // position spline
     [0.0, 0.0, 0.0],
-    [0.0, 0.0, size.z * 0.5],
-    [0.0, mouthTilt, size.z]
+    [0.0, 0.0, headSize.z * 0.3],
+    [0.0, mouthTilt, headSize.z]
   ];
   let scaleCtrlPoints = 
   [  // scale spline
-    [size.x, size.y, 1.0],
-    [size.x * 0.7, size.y * 0.7, 1.0],
-    [size.x * 0.4, size.y * 0.4, 1.0]
+    [neckSize.x, neckSize.y, 1.0],
+    [(headSize.x * 0.3) + (neckSize.x * 0.7), (headSize.y * 0.3) + (neckSize.y * 0.7), 1.0],
+    [headSize.x, headSize.y, 1.0]
   ];
 
   let all_idx = create_ring_spline(
     positions, indices, colors,
     numVertsRing, // num verts in a ring (MUST BE EVEN for the mouth func to work)
-    4,// num rings in spline
+    20,// num rings in spline
     posCtrlPoints, 
     scaleCtrlPoints,
-    {x: 0, y: 0, z: size.z * 0.05}, //end pole offset
+    {x: 0, y: 0, z: headSize.z * 0.05}, //end pole offset
     {x: 0, y: 0, z: 0.0},  //begin pole offset,
     {r: 0.1, g: 0.5, b: 0.1},
     false,
     true
   );
 
-  let lastRingStartIdx = all_idx[all_idx.length - numVertsRing - 1];
+  // Placing the eyes
+  // define splines to sample points
+  const posPath = new CatmullRomSpline3D(
+    posCtrlPoints,
+    0.5
+  );
+
+  const scalePath = new CatmullRomSpline3D(
+    scaleCtrlPoints,
+    0.5
+  );
+
+  function getEyeInfo(eyeInfoPacket, shift, angle) {
+    // 1. Calculate CURRENT Surface Position (P0)
+    let pos0 = posPath.getPoint(shift);
+    let scale0 = scalePath.getPoint(shift);
+    let spinePos0 = { x: pos0[0], y: pos0[1], z: pos0[2] };
+
+    // Calculate offset for P0
+    let offset0 = {
+        x: scale0[0] * Math.cos(angle),
+        y: scale0[1] * Math.sin(angle),
+        z: 0.0
+    };
+    
+    // 2. Calculate NEXT Surface Position (P1) - The "Slope" Check
+    let delta = 0.01; // Small step forward
+    let nextShift = Math.min(shift + delta, 1.0);
+    
+    let pos1 = posPath.getPoint(nextShift);
+    let scale1 = scalePath.getPoint(nextShift); // This captures the Taper!
+    
+    // Calculate offset for P1
+    let offset1 = {
+        x: scale1[0] * Math.cos(angle),
+        y: scale1[1] * Math.sin(angle),
+        z: 0.0
+    };
+
+    // 3. Define Left/Right Surface Points
+    let lPos0 = { x: pos0[0] - offset0.x, y: pos0[1] + offset0.y, z: pos0[2] };
+    let lPos1 = { x: pos1[0] - offset1.x, y: pos1[1] + offset1.y, z: pos1[2] };
+
+    let rPos0 = { x: pos0[0] + offset0.x, y: pos0[1] + offset0.y, z: pos0[2] };
+    let rPos1 = { x: pos1[0] + offset1.x, y: pos1[1] + offset1.y, z: pos1[2] };
+
+    // 4. Calculate Vectors for Normal Calculation
+    // Vector A: The slope along the body (Longitudinal)
+    let l_slopeVec = normalize(sub(lPos1, lPos0));
+    let r_slopeVec = normalize(sub(rPos1, rPos0));
+
+    // Vector B: The curve around the body (Latitudinal / Up)
+    // We can approximate this by crossing the Spine Tangent with the Radial Vector
+    let spineTangent = normalize(sub({x: pos1[0], y: pos1[1], z: pos1[2]}, spinePos0));
+    
+    let l_radial = normalize(sub(lPos0, spinePos0));
+    let r_radial = normalize(sub(rPos0, spinePos0));
+
+    // Calculate "Surface Up" (Tangential to the ring)
+    let l_up = normalize(cross(l_radial, spineTangent)); 
+    let r_up = normalize(cross(spineTangent, r_radial)); 
+
+    // 5. Calculate TRUE Surface Normals
+    // Cross the Slope vector with the Up vector
+    let l_trueNorm = normalize(cross(l_up, l_slopeVec));
+    let r_trueNorm = normalize(cross(r_slopeVec, r_up));
+
+    // 6. Fill Packet
+    eyeInfoPacket.l.pos = lPos0;
+    eyeInfoPacket.l.norm = l_trueNorm; // Use the new True Normal
+    eyeInfoPacket.l.tangent = spineTangent;
+
+    eyeInfoPacket.r.pos = rPos0;
+    eyeInfoPacket.r.norm = r_trueNorm; // Use the new True Normal
+    eyeInfoPacket.r.tangent = spineTangent;
+    
+    return;
+  }
+
+  let eyeShift = 0.4;
+  let eyeAngle = 0.0;
+  let infoPacket =
+  {
+    l: {
+      pos: {x: 0.0, y: 0.0, z: 0.0}, 
+      norm: {x: 0.0, y: 1.0, z: 0.0}, 
+      tangent: {x: 0.0, y: 1.0, z: 0.0}
+    },
+    r: {
+      pos: {x: 0.0, y: 0.0, z: 0.0}, 
+      norm: {x: 0.0, y: 1.0, z: 0.0}, 
+      tangent: {x: 0.0, y: 1.0, z: 0.0}
+    }
+  };
+  getEyeInfo(infoPacket, eyeShift, eyeAngle);
+
+  function positionEye(eyeInfo) {
+    let fcn_eye_idx = sphere(positions, indices, colors, {x: 0.0, y: 0.0, z: 0.0}, {r: 0.1, g: 0.1, b: 0.5}, 1.0);
+    
+    // 1. Flatten the eye so we can see the orientation.
+    // Z is 0.3 (Thin disk). 
+    scale_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 1.0, y: 1.0, z: 0.3});
+    rotate_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 0.0, y: 0.0, z: 0.0})
+
+    let fcn_origin = eyeInfo.pos;
+    let fcn_forward = eyeInfo.norm;    // The Normal (Out of skin)
+    let fcn_spine_tan = eyeInfo.tangent; // The direction of the spine
+
+    // 2. Construct the Orthogonal Basis (Gram-Schmidt-like process)
+    
+    // Step A: Z points OUT of the face.
+    // This is the most important axis. The eye must face this way.
+    let newZ = normalize(fcn_forward);
+
+    // Step B: X points "Right" relative to the fish's body line.
+    // We cross the Spine Tangent with the Normal.
+    // This forces X to lie flat against the skin surface.
+    let newX = normalize(cross(fcn_spine_tan, newZ));
+
+    // Step C: Y points "Up" along the skin surface.
+    // We cross Z with X. 
+    // This gives us a vector that points roughly towards the tail/spine 
+    // but acts as a perfect tangent to the surface curve.
+    let newY = normalize(cross(newZ, newX));
+
+    // 3. Construct Matrix (BASIS VECTORS AS COLUMNS)
+    // If we put them as rows, the eye will rotate incorrectly.
+    let fcn_matrix = [
+        newX.x, newY.x, newZ.x,
+        newX.y, newY.y, newZ.y,
+        newX.z, newY.z, newZ.z
+    ];
+
+    apply_matrix_transform(positions, fcn_eye_idx, fcn_matrix, {x: 0.0, y: 0.0, z: 0.0});
+
+    // 4. Translate to position
+    // OPTIONAL: Add a tiny offset along the normal to prevent Z-fighting/Clipping
+    // let offsetPos = addVec(fcn_origin, scaleVec(newZ, 0.02)); 
+    translate(positions, fcn_eye_idx, fcn_origin);
+
+    return fcn_eye_idx;
+  }
+
+  let eyeR_idx = positionEye(infoPacket.l);
+  all_idx.push(...eyeR_idx);
+  let eyeL_idx = positionEye(infoPacket.r);
+  all_idx.push(...eyeL_idx);
+  // Making the mouth
+
+  let lastRingStartIdx = all_idx[all_idx.length - numVertsRing - eyeR_idx.length - eyeL_idx.length - 1];
   let finalRingIndices = [];
   for (let i = 0; i < numVertsRing; ++i)
   {
     finalRingIndices.push(lastRingStartIdx + i);
   }
 
-  let mouthStickOut = size.z * 0.1;
-  let mouthScale = 0.5;
+  let mouthStickOut = headSize.z * 0.1;
 
   let mouth_idx = fill_ring_mouth(
     positions, indices, colors,
     finalRingIndices,
     mouthStickOut,
     // top size, offset
-    {x: 1.0, y: 1.0, z: 1.0},
-    {x:0.0, y:0.0, z:0.0},
+    {x: 0.4, y: 0.5, z: 1.0},
+    {x:0.0, y:0.01, z:-0.01},
     // bot size, offset
-    {x: 1.0, y: 1.0, z: 1.0},
-    {x:0.0, y:0.0, z:0.0}
+    {x: 0.65, y: 0.2, z: 1.0},
+    {x:0.0, y:-0.025, z:-0.01}
   );
   all_idx.push(...mouth_idx);
   
@@ -338,13 +480,60 @@ export const caudal_types = {
   VBUTT: "VBUTT",
   BUTTERFLY: "BUTTERFLY"
 };
-function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, width, caudalType) {
-  // cube (/loop) with special deformation
-  let all_idx = create_subdiv_box(
-    positions, indices, colors, 
-    4, 4, 4, 1, 2, 3
+function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, caudalWidth, caudalType) {
+  let iterVal = caudalWidth / 4.0;
+
+  let all_idx = [];
+  
+  // start ring
+  let first_idx = create_ring(positions, indices, colors, 6, 0.05, 1.0, vec3(0.0, 0.0, 0.0));
+  let startPole = fill_ring_pole(positions, indices, first_idx, colors, vec3(0.0, 0.0, 0.0), false);
+
+  // thickness for first ring
+  let second_idx = extrude_ring(positions, indices, first_idx, colors, vec3(0.0, 0.0, iterVal));
+
+  let firstHalf = [...first_idx, ...startPole, ...second_idx];
+  
+  // inset ring
+  let third_idx = extrude_ring(positions, indices, second_idx, colors, vec3(0.0, 0.0, iterVal));
+  scale_around_point(positions, third_idx, vec3(0.0, 0.0, 0.0), vec3(1.0, 0.5, 1.0));
+  translate(positions, third_idx, vec3(0.0, -0.44, 0.0));
+  
+  // return to start width
+  let fourth_idx = extrude_ring(positions, indices, third_idx, colors, vec3(0.0, 0.0, iterVal));
+  translate(positions, fourth_idx, vec3(0.0, 0.44, 0.0));
+  scale_around_point(positions, fourth_idx, vec3(0.0, 0.0, 0.0), vec3(1.0, 2.0, 1.0));
+  
+  // end of fin
+  let fifth_idx = extrude_ring(positions, indices, fourth_idx, colors, vec3(0.0, 0.0, iterVal));
+  let endPole = fill_ring_pole(positions, indices, fifth_idx, colors, vec3(0.0, 0.0, 0.0), true);
+  
+  let secondHalf = [...fourth_idx, ...fifth_idx, ...endPole];
+
+  all_idx.push(
+    ...first_idx,
+    ...startPole,
+    ...second_idx,
+    ...third_idx,
+    ...fourth_idx,
+    ...fifth_idx,
+    ...endPole   
   );
-  return;
+
+  translate(positions, all_idx, vec3(0.0, 0.0, iterVal * -2.0));
+
+  rotate_around_point(positions, secondHalf, vec3(0.0, 0.0, 0.0), vec3(5.0, 0.0, 0.0));
+  rotate_around_point(positions, firstHalf, vec3(0.0, 0.0, 0.0), vec3(-5.0, 0.0, 0.0));
+
+  scale_around_point
+  
+  translate(positions, all_idx, vec3(0.0, caudalLength * 0.3, 0.0));
+  scale_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(0.5, caudalLength * 0.5, 0.5));
+
+  rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(90.0, 0.0, 0.0));
+  translate(positions, all_idx, caudalPos);
+
+  return all_idx;
 }
 
 export const dorsal_types = {
@@ -352,9 +541,78 @@ export const dorsal_types = {
   PUNK: "PUNK",
   SWEPT: "SWEPT"
 };
-function gfish_dorsal(positions, indices, colors, dorsalPos, dorsalLength, width, dorsalType) {
-  // cube (/loop) with special deformation, maybe follow spline
-  return;
+function gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalShift, posCtrlPoints, scaleCtrlPoints, dorsalType) {
+  
+  const posPath = new CatmullRomSpline3D(
+    posCtrlPoints,
+    0.5
+  );
+  const scalePath = new CatmullRomSpline3D(
+    scaleCtrlPoints,
+    0.5
+  );
+  
+  let dorsalPath = posPath.getPoint(dorsalShift);
+  let dorsalPathScale = scalePath.getPoint(dorsalShift);
+
+  // ensures length is not too long
+  let clampedLength = Math.min(dorsalShift + dorsalLength, 1.0) - dorsalShift;
+  let incVal = clampedLength / 3.0;
+
+  // finding offsets for each ring
+  let ring1Offset = posPath.getPoint(dorsalShift);
+  let r1O = vec3(ring1Offset[0], ring1Offset[1], ring1Offset[2]);
+  r1O.y += scalePath.getPoint(dorsalShift)[1];
+
+  let ring2Offset = posPath.getPoint(dorsalShift + incVal);
+  ring2Offset[1] += scalePath.getPoint(dorsalShift + incVal)[1];
+  let r2O = sub(vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), r1O);
+  
+  let ring3Offset = posPath.getPoint(dorsalShift + incVal * 2.0);
+  ring3Offset[1] += scalePath.getPoint(dorsalShift + incVal * 2.0)[1];
+  let r3O = sub(vec3(ring3Offset[0], ring3Offset[1], ring3Offset[2]), vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]));
+  
+  let ring4Offset = posPath.getPoint(dorsalShift + incVal * 3.0);
+  ring4Offset[1] += scalePath.getPoint(dorsalShift + incVal * 3.0)[1];
+  let r4O = sub(vec3(ring4Offset[0], ring4Offset[1], ring4Offset[2]), vec3(ring3Offset[0], ring3Offset[1], ring3Offset[2]));
+
+  // generating rings
+  let all_idx = [];
+
+  let first_idx = create_ring(positions, indices, colors, 6, 0.05, dorsalWidth * 0.5, r1O);
+  let startPole = fill_ring_pole(positions, indices, first_idx, colors, vec3(0.0, 0.0, 0.0), false);
+
+  let second_idx = extrude_ring(positions, indices, first_idx, colors, vec3(0.0, r2O.y, incVal));
+  scale_around_point(positions, second_idx, vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), vec3(1.0, 0.8, 1.0));
+
+  let third_idx = extrude_ring(positions, indices, second_idx, colors, vec3(0.0, r3O.y, incVal));
+  scale_around_point(positions, third_idx, vec3(ring3Offset[0], ring3Offset[1], ring3Offset[2]), vec3(1.0, 1.2, 1.0));
+
+  let fourth_idx = extrude_ring(positions, indices, third_idx, colors, vec3(0.0, r4O.y, incVal));
+  scale_around_point(positions, fourth_idx, vec3(ring4Offset[0], ring4Offset[1], ring4Offset[2]), vec3(1.0, 1.05, 1.0));
+  let endPole = fill_ring_pole(positions, indices, fourth_idx, colors, vec3(0.0, 0.0, 0.0), true);
+
+  // group for end
+  let end_idx = [...fourth_idx, ...endPole];
+
+  // fin curves
+  rotate_around_point(positions, second_idx, vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), vec3(10.0, 0.0, 0.0));
+  rotate_around_point(positions, third_idx, vec3(ring3Offset[0], ring3Offset[1], ring3Offset[2]), vec3(15.0, 0.0, 0.0));
+  rotate_around_point(positions, end_idx, vec3(ring4Offset[0], ring4Offset[1], ring4Offset[2]), vec3(25.0, 0.0, 0.0));
+
+  all_idx.push(
+    ...first_idx, 
+    ...startPole, 
+    ...second_idx, 
+    ...third_idx,
+    ...fourth_idx,
+    ...endPole
+  );
+
+  // positioning final fin
+  //translate(positions, all_idx, addVec(dorsalPos, vec3(0.0, 0.0, 0.0)));
+  //rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(5.0, 0.0, 0.0));
+  return all_idx;
 }
 
 function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, width) {
@@ -451,19 +709,66 @@ export const afin_types = {
   SPIKY: "SPIKY",
   FEATHERY: "FEATHERY"
 };
-function gfish_anal_fin(positions, indices, colors, afinPos, afinLength, width, afinType, pos) {
-  // same as dorsal, but smaller and probably less variety (all references looked the same here)
-  return;
+function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType) {
+  
+  const posPath = new CatmullRomSpline3D(
+    posCtrlPoints,
+    0.5
+  );
+  const scalePath = new CatmullRomSpline3D(
+    scaleCtrlPoints,
+    0.5
+  );
+
+  // ensures length is not too long
+  let clampedLength = Math.min(afinShift + afinLength, 0.9) - afinShift;
+
+  // finding offsets for each ring
+  let ring1Offset = posPath.getPoint(afinShift);
+  let r1O = vec3(ring1Offset[0], ring1Offset[1], ring1Offset[2]);
+  r1O.y -= scalePath.getPoint(afinShift)[1];
+
+  let ring2Offset = posPath.getPoint(afinShift + clampedLength);
+  ring2Offset[1] -= scalePath.getPoint(afinShift + clampedLength)[1];
+  let r2O = sub(vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), r1O);
+
+  // generating rings
+  let all_idx = [];
+
+  let first_idx = create_ring(positions, indices, colors, 6, 0.05, afinWidth * 0.5, r1O);
+  let startPole = fill_ring_pole(positions, indices, first_idx, colors, vec3(0.0, 0.0, 0.0), false);
+
+  let second_idx = extrude_ring(positions, indices, first_idx, colors, vec3(0.0, r2O.y, clampedLength));
+  scale_around_point(positions, second_idx, vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), vec3(1.0, 3.0, 1.0));
+
+  let endPole = fill_ring_pole(positions, indices, second_idx, colors, vec3(0.0, 0.0, 0.0), true);
+
+  // group for end
+  let end_idx = [...second_idx, ...endPole];
+
+  // fin curves
+  //rotate_around_point(positions, end_idx, vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), vec3(10.0, 0.0, 0.0));
+
+  all_idx.push(
+    ...first_idx, 
+    ...startPole, 
+    ...end_idx
+  );
+
+  // positioning final fin
+  //translate(positions, all_idx, addVec(dorsalPos, vec3(0.0, 0.0, 0.0)));
+  //rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(5.0, 0.0, 0.0));
+  return all_idx;
 }
 
 export function goldfish(
     positions, indices, colors,
     // body params 
-    bodyLength, bodyHeight, bodyWidth, belly_size, arch,
+    bodyLength, bodyHeight, bodyWidth, arch,
     // head params
     headSize, eyeType, mouthTilt,
     // caudal params
-    caudalLength, caudalWidth, caudalType, caudalAngle,
+    caudalLength, caudalWidth, caudalType,
     // dorsal params
     dorsalLength, dorsalWidth, dorsalShift, dorsalType,
     // pelvic params
@@ -471,7 +776,7 @@ export function goldfish(
     // pectoral params
     pectoralLength, pectoralWidth, pectoralShift, pectoralAngle,
     // afin params
-    afinLength, afinWidth, afinType, afinShift, afinAngle
+    afinLength, afinWidth, afinType, afinShift
   ) {
   let pectoralInfoPacket =
   {
@@ -501,22 +806,21 @@ export function goldfish(
     }
   };
 
-  let afin_pos = {x: 0.0, y: 0.0, z: 0.0};
-  let afin_norm = {x: 0.0, y: 1.0, z: 0.0};
-
-  let dorsal_pos = {x: 0.0, y: 0.0, z: 0.0};
-  let caudal_pos = {x: 0.0, y: 0.0, z: 0.0};
   let head_pos = {x: 0.0, y: 0.0, z: 0.0};
+  let caudal_pos = vec3(0.0, 0.0, 0.0);
+  let head_body_size = vec3(0.0, 0.0, 0.0);
 
+  let posCtrlPoints = [];
+  let scaleCtrlPoints = [];
   gfish_body(
     positions, indices, colors, 
-    bodyLength, bodyHeight, bodyWidth, belly_size, arch,
+    bodyLength, bodyHeight, bodyWidth, arch,
     pectoralInfoPacket, pectoralShift, pectoralAngle,
     pelvicInfoPacket, pelvicShift, pelvicAngle,
-    afin_pos, afinShift, afinAngle,
-    dorsal_pos, dorsalShift,
-    caudal_pos, 
-    head_pos  
+    caudal_pos,
+    head_pos, head_body_size,
+    posCtrlPoints,
+    scaleCtrlPoints
   );
 
   gfish_pectoral(positions, indices, colors, pectoralInfoPacket.l, pectoralLength, pectoralWidth);
@@ -525,14 +829,12 @@ export function goldfish(
   gfish_pelvic(positions, indices, colors, pelvicInfoPacket.l, pelvicLength, pelvicWidth);
   gfish_pelvic(positions, indices, colors, pelvicInfoPacket.r, pelvicLength, pelvicWidth);
 
-  let head_size = {x: 0.6, y: 0.6, z: 1.0};
-  gfish_head(positions, indices, colors, head_pos, head_size, eyeType.BUBBLY, 0.0);
-  // gfish_head(positions, indices, colors, head_pos, headSize, eyeType, mouthTilt);
-  // gfish_caudal(positions, indices, colors, caudal_pos, caudalLength, caudalWidth, caudalType);
-  // gfish_dorsal(positions, indices, colors, dorsal_pos, dorsalLength, dorsalWidth, dorsalType);
-  // gfish_pelvic(positions, indices, colors, pelvic_pos, pelvicLength, pelvicWidth, pelvic_pos);
-  // gfish_pectoral(positions, indices, colors, pectoral_pos, pectoralLength, pectoralWidth, pectoral_pos);
-  // gfish_anal_fin(positions, indices, colors, afin_pos, afinLength, afinWidth, afinType, afin_pos);
+  headSize.x *= 0.1;
+  headSize.y *= 0.2;
+  gfish_head(positions, indices, colors, head_pos, head_body_size, headSize, eye_types.BUBBLY, mouthTilt);
+  gfish_caudal(positions, indices, colors, caudal_pos, caudalLength, caudalWidth, caudal_types.VBUTT); 
+  gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalShift, posCtrlPoints, scaleCtrlPoints, dorsalType);
+  gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType);
 
   return;
 }

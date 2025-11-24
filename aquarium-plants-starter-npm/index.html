@@ -153,13 +153,11 @@
         </h2>
         <div style="margin-left: 15px;">
             <label> Body Length </label>
-            <input id="bodyLength" type="range" min="0.2" max="1.5" step="0.05" value="0.5" />
+            <input id="bodyLength" type="range" min="0.2" max="1.5" step="0.05" value="1.25" />
             <label> Body Height </label>
-            <input id="bodyHeight" type="range" min="0.1" max="1.5" step="0.05" value="0.5" />
+            <input id="bodyHeight" type="range" min="0.1" max="1.5" step="0.05" value="0.45" />
             <label> Body Width </label>
-            <input id="bodyWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
-            <label> Belly Size </label>
-            <input id="belly_size" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <input id="bodyWidth" type="range" min="0.5" max="2.0" step="0.05" value="0.5" />
             <label> Arch </label>
             <input id="arch" type="range" min="-0.5" max="0.5" step="0.05" value="0.0" />
         </div>
@@ -175,16 +173,16 @@
             <div id="eyeType-container" style="margin-left: 20px;">
                 <input type="radio" id="eyeType-BULGE" name="eyeType" value="BULGE">
                 <label for="eyeType-BULGE">Bulging</label>
-                <input type="radio" id="eyeType-GOOGLY" name="eyeType" value="GOOGLY" checked>
+                <input type="radio" id="eyeType-GOOGLY" name="eyeType" value="GOOGLY">
                 <label for="eyeType-GOOGLY">Googly</label>
-                <input type="radio" id="eyeType-CHEEKS" name="eyeType" value="CHEEKS">
+                <input type="radio" id="eyeType-CHEEKS" name="eyeType" value="CHEEKS" checked>
                 <label for="eyeType-CHEEKS">Cheeks</label>
                 <input type="radio" id="eyeType-BUBBLY" name="eyeType" value="BUBBLY">
                 <label for="eyeType-BUBBLY">Bubbly</label>
             </div>
             
             <label> Mouth Tilt </label>
-            <input id="mouthTilt" type="range" min="-0.5" max="0.5" step="0.05" value="0.5" />
+            <input id="mouthTilt" type="range" min="-0.5" max="0.5" step="0.05" value="0.0" />
         </div>
 
         <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
@@ -192,11 +190,9 @@
         </h2>
         <div style="margin-left: 15px;">
             <label> Caudal Length </label>
-            <input id="caudalLength" type="range" min="0.5" max="3.0" step="0.1" value="1.0" />
+            <input id="caudalLength" type="range" min="0.5" max="3.0" step="0.1" value="1.1" />
             <label> Caudal Width </label>
-            <input id="caudalWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
-            <label> Caudal Angle </label>
-            <input id="caudalAngle" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <input id="caudalWidth" type="range" min="0.5" max="2.0" step="0.05" value="0.7" />
             <label style="font-weight: bold;"> Caudal Type </label>
             <div id="caudalType-container" style="margin-left: 20px;">
                 <input type="radio" id="caudalType-DROOPY" name="caudalType" value="DROOPY">
@@ -217,11 +213,11 @@
         </h2>
         <div style="margin-left: 15px;">
             <label> Dorsal Length </label>
-            <input id="dorsalLength" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <input id="dorsalLength" type="range" min="0.0" max="1.0" step="0.05" value="0.5" />
             <label> Dorsal Width </label>
-            <input id="dorsalWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <input id="dorsalWidth" type="range" min="0.5" max="2.0" step="0.05" value="0.5" />
             <label> Dorsal Shift </label>
-            <input id="dorsalShift" type="range" min="0.0" max="1.0" step="0.05" value="0.0" />
+            <input id="dorsalShift" type="range" min="0.0" max="1.0" step="0.05" value="0.4" />
             
             <label style="font-weight: bold;"> Dorsal Type </label>
             <div id="dorsalType-container" style="margin-left: 20px;">
@@ -239,13 +235,13 @@
         </h2>
         <div style="margin-left: 15px;">
             <label> Pelvic Length </label>
-            <input id="pelvicLength" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <input id="pelvicLength" type="range" min="0.5" max="2.0" step="0.05" value="0.85" />
             <label> Pelvic Width </label>
             <input id="pelvicWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
             <label> Pelvic Shift </label>
-            <input id="pelvicShift" type="range" min="0.0" max="1.0" step="0.05" value="0.0" />
+            <input id="pelvicShift" type="range" min="0.0" max="1.0" step="0.05" value="0.55" />
             <label> Pelvic Angle </label>
-            <input id="pelvicAngle" type="range" min="-0.5" max="0.5" step="0.05" value="0.0" />
+            <input id="pelvicAngle" type="range" min="-0.5" max="0.5" step="0.05" value="-0.5" />
         </div>
 
         <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
@@ -253,13 +249,13 @@
         </h2>
         <div style="margin-left: 15px;">
             <label> Pectoral Length </label>
-            <input id="pectoralLength" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <input id="pectoralLength" type="range" min="0.5" max="2.0" step="0.05" value="0.95" />
             <label> Pectoral Width </label>
             <input id="pectoralWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
             <label> Pectoral Shift </label>
-            <input id="pectoralShift" type="range" min="0.0" max="1.0" step="0.05" value="0.0" />
+            <input id="pectoralShift" type="range" min="0.0" max="1.0" step="0.05" value="0.25" />
             <label> Pectoral Angle </label>
-            <input id="pectoralAngle" type="range" min="-0.5" max="0.5" step="0.05" value="0.0" />
+            <input id="pectoralAngle" type="range" min="-0.5" max="0.5" step="0.05" value="-0.35" />
         </div>
 
         <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
@@ -267,19 +263,17 @@
         </h2>
         <div style="margin-left: 15px;">
             <label> Anal Fin Length </label>
-            <input id="afinLength" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <input id="afinLength" type="range" min="0.1" max="0.6" step="0.01" value="0.5" />
             <label> Anal Fin Width </label>
-            <input id="afinWidth" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <input id="afinWidth" type="range" min="0.1" max="0.35" step="0.01" value="0.5" />
             <label> Anal Fin Shift </label>
-            <input id="afinShift" type="range" min="0.0" max="1.0" step="0.05" value="1.0" />
-            <label> Anal Fin Angle </label>
-            <input id="afinAngle" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+            <input id="afinShift" type="range" min="0.35" max="0.7" step="0.01" value="0.45" />
             
             <label style="font-weight: bold;"> Anal Fin Type </label>
             <div id="afinType-container" style="margin-left: 20px;">
-                <input type="radio" id="afinType-SPIKY" name="afinType" value="SPIKY">
+                <input type="radio" id="afinType-SPIKY" name="afinType" value="SPIKY" checked>
                 <label for="afinType-SPIKY">Spiky</label>
-                <input type="radio" id="afinType-FEATHERY" name="afinType" value="FEATHERY" checked>
+                <input type="radio" id="afinType-FEATHERY" name="afinType" value="FEATHERY">
                 <label for="afinType-FEATHERY">Feathery</label>
             </div>
         </div>

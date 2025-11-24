@@ -1,5 +1,9 @@
 // helper "vec3" functions
 
+export function vec3(x, y, z) {
+  return {x: x, y: y, z: z};
+}
+
 export function length(vecObj = {}) 
 {
   if (vecObj.x == null || vecObj.y == null || vecObj.z == null) {
