@@ -12,7 +12,8 @@ import {
     translate, 
     create_ring_spline, 
     sphere,
-    getCentroid
+    getCentroid,
+    bend
 } from "./proceduralSculpting.js";
 import {
     length,
@@ -106,8 +107,8 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
     };
 
     let lPos = {
-        x: finPos[0] - offset.x,
-        y: finPos[1] + offset.y,
+        x: finPos[0] - offset.x * 0.9,
+        y: finPos[1] + offset.y * 0.9,
         z: finPos[2]
     };
     const normL = normalize(sub(lPos, spinePos));
@@ -117,8 +118,8 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
     finInfoPacket.l.tangent = spineTangent;
 
     let rPos = {
-        x: finPos[0] + offset.x,
-        y: finPos[1] + offset.y,
+        x: finPos[0] + offset.x * 0.9,
+        y: finPos[1] + offset.y * 0.9,
         z: finPos[2]
     };
     const normR = normalize(sub(rPos, spinePos));
@@ -273,8 +274,8 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
   let posCtrlPoints = 
   [  // position spline
     [0.0, 0.0, 0.0],
-    [0.0, 0.0, headSize.z * 0.3],
-    [0.0, mouthTilt, headSize.z]
+    [0.0, 0.0, headSize.z * 0.15],
+    [0.0, mouthTilt, headSize.z * 0.5]
   ];
   let scaleCtrlPoints = 
   [  // scale spline
@@ -393,11 +394,11 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
   getEyeInfo(infoPacket, eyeShift, eyeAngle);
 
   function positionEye(eyeInfo) {
-    let fcn_eye_idx = sphere(positions, indices, colors, {x: 0.0, y: 0.0, z: 0.0}, {r: 0.1, g: 0.1, b: 0.5}, headSize.y);
+    let fcn_eye_idx = sphere(positions, indices, colors, {x: 0.0, y: 0.0, z: 0.0}, {r: 0.1, g: 0.1, b: 0.5}, 1.0);
     
     // 1. Flatten the eye so we can see the orientation.
     // Z is 0.3 (Thin disk). 
-    scale_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 0.5, y: 0.5, z: 0.5});
+    scale_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 5.0 * headSize.x + 0.15, y: 5.0 * headSize.x + 0.15, z: 5.0 * headSize.x + 0.15});
     rotate_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 90.0, y: 0.0, z: 0.0})
 
     let fcn_origin = eyeInfo.pos;
@@ -486,7 +487,7 @@ function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, cauda
   let all_idx = [];
   
   // start ring
-  let first_idx = create_ring(positions, indices, colors, 6, 0.05, 1.0, vec3(0.0, 0.0, 0.0));
+  let first_idx = create_ring(positions, indices, colors, 8, 0.05, 1.0, vec3(0.0, 0.0, 0.0));
   let startPole = fill_ring_pole(positions, indices, first_idx, colors, vec3(0.0, 0.0, 0.0), false);
 
   // thickness for first ring
@@ -525,12 +526,31 @@ function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, cauda
   rotate_around_point(positions, secondHalf, vec3(0.0, 0.0, 0.0), vec3(5.0, 0.0, 0.0));
   rotate_around_point(positions, firstHalf, vec3(0.0, 0.0, 0.0), vec3(-5.0, 0.0, 0.0));
 
-  scale_around_point
-  
-  translate(positions, all_idx, vec3(0.0, bodyLength * 0.03 + caudalLength * 0.255, 0.0));
+  translate(positions, all_idx, vec3(0.0, -bodyLength * 0.3 + caudalLength * 0.4, 0.0));
   scale_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(0.5, caudalLength * 0.5, 0.5));
 
   rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(90.0, 0.0, 0.0));
+
+  
+  bend(
+    positions, 
+    firstHalf, 
+    1.5,                    // Amount (Swish strength)
+    vec3(0, 0, 0),          // Origin (The root of the tail)
+    caudalLength * 0.9,           // Max Length (For normalization)
+    2,                      // Scale Axis: Z (Distance along the tail)
+    1                       // Application Axis: X (Side-to-side movement)
+  );
+  bend(
+    positions, 
+    secondHalf, 
+    -1.5,                    // Amount (Swish strength)
+    vec3(0, 0, 0),          // Origin (The root of the tail)
+    caudalLength * 0.9,           // Max Length (For normalization)
+    2,                      // Scale Axis: Z (Distance along the tail)
+    1                       // Application Axis: X (Side-to-side movement)
+  );
+  
   translate(positions, all_idx, caudalPos);
 
   return all_idx;
@@ -614,7 +634,7 @@ function gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dor
   return all_idx;
 }
 
-function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, width) {
+function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, pelvicWidth, left = true) {
   let origin = pelvicInfo.pos;
   let forward = pelvicInfo.norm;
   let up = pelvicInfo.tangent;
@@ -627,19 +647,33 @@ function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, widt
     4,// num rings in spline
     [  // position spline
       [0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.2],
-      [0.0, 0.03, 0.3],
-      [0.0, 0.0, 0.4]
+      [0.0, 0.0, pelvicLength * 0.5],
+      [0.0, 0.03, pelvicLength * 0.75],
+      [0.0, 0.0, pelvicLength]
     ], 
     [  // scale spline
-      [0.02, 0.01, 1.0],
-      [0.02, 0.01, 1.0],
-      [0.07, 0.01, 1.0],
-      [0.04, 0.01, 1.0]
+      [0.02 * pelvicWidth, 0.01, 1.0],
+      [0.02 * pelvicWidth, 0.01, 1.0],
+      [0.07 * (pelvicWidth * 1.1), 0.01, 1.0],
+      [0.04 * (pelvicWidth * 1.1), 0.01, 1.0]
     ],
-    {x: 0, y: 0, z: 0.03}, //end pole offset
+    {x: 0, y: 0, z: 0.03 * pelvicLength}, //end pole offset
     {x: 0, y: 0, z: 0.0}  //begin pole offset
   );
+
+  // take last two loops + cap
+  let end_idx = all_idx.slice(all_idx.length - 14, all_idx.length - 1);
+  let end_centroid = getCentroid(positions, end_idx);
+
+  // rotate last 13 vertices to get pelvic fin shape
+  if (left) {
+    rotate_around_point(positions, end_idx, end_centroid, vec3(0.0, -30.0, 0.0));
+    rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, -90.0));
+  }
+  else {
+    rotate_around_point(positions, end_idx, end_centroid, vec3(0.0, 30.0, 0.0));
+    rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, 90.0));
+  }
 
   let newZ = forward;
   let newX = normalize(cross(up, newZ));
@@ -659,7 +693,7 @@ function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, widt
   return all_idx;
 }
 
-function gfish_pectoral(positions, indices, colors, pectoralInfo, pectoralLength, width) {
+function gfish_pectoral(positions, indices, colors, pectoralInfo, pectoralLength, pectoralWidth) {
   let origin = pectoralInfo.pos;
   let forward = pectoralInfo.norm;
   let up = pectoralInfo.tangent;
@@ -672,15 +706,15 @@ function gfish_pectoral(positions, indices, colors, pectoralInfo, pectoralLength
     4,// num rings in spline
     [  // position spline
       [0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.2],
-      [0.0, 0.03, 0.3],
-      [0.0, 0.0, 0.4]
+      [0.0, 0.0, pectoralLength * 0.5],
+      [0.0, 0.03 - (pectoralLength * 0.075), pectoralLength * 0.75],
+      [0.0, 0.0 + (pectoralLength * 0.3), pectoralLength]
     ], 
     [  // scale spline
-      [0.02, 0.01, 1.0],
-      [0.02, 0.01, 1.0],
-      [0.07, 0.01, 1.0],
-      [0.04, 0.01, 1.0]
+      [0.02 * pectoralWidth, 0.01, 1.0],
+      [0.02 * pectoralWidth, 0.01, 1.0],
+      [0.07 * (pectoralWidth * 1.1), 0.01, 1.0],
+      [0.04 * (pectoralWidth * 1.1), 0.01, 1.0]
     ],
     {x: 0, y: 0, z: 0.03}, //end pole offset
     {x: 0, y: 0, z: 0.0}  //begin pole offset
@@ -710,43 +744,56 @@ export const afin_types = {
 };
 function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType) {
   
-  const posPath = new CatmullRomSpline3D(
-    posCtrlPoints,
-    0.5
-  );
-  const scalePath = new CatmullRomSpline3D(
-    scaleCtrlPoints,
-    0.5
-  );
+  const posPath = new CatmullRomSpline3D(posCtrlPoints, 0.5);
+  const scalePath = new CatmullRomSpline3D(scaleCtrlPoints, 0.5);
+
+  // 1. Define Radius and Embed Amount
+  const finRadius = afinWidth * 0.5;
+  
+  // ADD this to the height (since we are on the bottom, adding moves it UP into the body)
+  const embedOffset = afinWidth * 0.2; 
 
   // ensures length is not too long
   let clampedLength = Math.min(afinShift + afinLength, 0.9) - afinShift;
 
-  // finding offsets for each ring
-  let ring1Offset = posPath.getPoint(afinShift);
-  let r1O = vec3(ring1Offset[0], ring1Offset[1], ring1Offset[2]);
-  r1O.y -= scalePath.getPoint(afinShift)[1];
+  // --- HELPER: Calculate Absolute Ring Center ---
+  function getRingCenter(t) {
+      let p = posPath.getPoint(t);   
+      let s = scalePath.getPoint(t); 
+      
+      // Logic: Spine - Skin_Height - Fin_Radius + Embed_Amount
+      // We subtract s[1] and finRadius to move to the bottom edge.
+      // We ADD embedOffset to tuck it slightly back inside the mesh.
+      let yPos = p[1] - s[1] - finRadius + embedOffset;
+      
+      return vec3(p[0], yPos, p[2]);
+  }
 
-  let ring2Offset = posPath.getPoint(afinShift + clampedLength);
-  ring2Offset[1] -= scalePath.getPoint(afinShift + clampedLength)[1];
-  let r2O = sub(vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), r1O);
+  // 2. Pre-calculate absolute positions
+  let pos1 = getRingCenter(afinShift);
+  let pos2 = getRingCenter(afinShift + clampedLength);
 
-  // generating rings
+  // 3. Calculate Delta for exact extrusion
+  let delta = sub(pos2, pos1);
+
+  // --- GEOMETRY GENERATION ---
   let all_idx = [];
 
-  let first_idx = create_ring(positions, indices, colors, 6, 0.05, afinWidth * 0.5, r1O);
+  // Ring 1 (Start)
+  let first_idx = create_ring(positions, indices, colors, 6, 0.05, finRadius, pos1);
   let startPole = fill_ring_pole(positions, indices, first_idx, colors, vec3(0.0, 0.0, 0.0), false);
 
-  let second_idx = extrude_ring(positions, indices, first_idx, colors, vec3(0.0, r2O.y, clampedLength));
-  scale_around_point(positions, second_idx, vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), vec3(1.0, 3.0, 1.0));
+  // Ring 2 (End)
+  // Extrude using the delta vector so it follows the body slope perfectly
+  let second_idx = extrude_ring(positions, indices, first_idx, colors, delta);
+  
+  // Apply the flair scaling (from your original code) around the calculated center
+  scale_around_point(positions, second_idx, vec3(pos2.x, pos2.y, pos2.z), vec3(1.0, 3.0, 1.0));
 
   let endPole = fill_ring_pole(positions, indices, second_idx, colors, vec3(0.0, 0.0, 0.0), true);
 
   // group for end
   let end_idx = [...second_idx, ...endPole];
-
-  // fin curves
-  //rotate_around_point(positions, end_idx, vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), vec3(10.0, 0.0, 0.0));
 
   all_idx.push(
     ...first_idx, 
@@ -754,9 +801,6 @@ function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinS
     ...end_idx
   );
 
-  // positioning final fin
-  //translate(positions, all_idx, addVec(dorsalPos, vec3(0.0, 0.0, 0.0)));
-  //rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(5.0, 0.0, 0.0));
   return all_idx;
 }
 
@@ -825,8 +869,8 @@ export function goldfish(
   gfish_pectoral(positions, indices, colors, pectoralInfoPacket.l, pectoralLength, pectoralWidth);
   gfish_pectoral(positions, indices, colors, pectoralInfoPacket.r, pectoralLength, pectoralWidth);
 
-  gfish_pelvic(positions, indices, colors, pelvicInfoPacket.l, pelvicLength, pelvicWidth);
-  gfish_pelvic(positions, indices, colors, pelvicInfoPacket.r, pelvicLength, pelvicWidth);
+  gfish_pelvic(positions, indices, colors, pelvicInfoPacket.l, pelvicLength, pelvicWidth, true);
+  gfish_pelvic(positions, indices, colors, pelvicInfoPacket.r, pelvicLength, pelvicWidth, false);
 
   headSize.x *= 0.1;
   headSize.y *= 0.2;

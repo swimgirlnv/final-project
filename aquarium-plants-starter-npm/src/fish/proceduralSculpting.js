@@ -1,6 +1,57 @@
 import { CatmullRomSpline3D } from "./splineVec3.js";
 import { addVec, scaleVec } from "./linearTools.js";
 
+export function bend(positions, idx_list, amount, origin, maxLength, scaleAxis = 0, applicationAxis = 0) {
+    // 1. Create a Set to track which vertices we have already moved.
+    // This prevents the "Double-Dip" bug on shared vertices.
+    const processed = new Set();
+
+    for (let i = 0; i < idx_list.length; ++i) {
+      let idx = idx_list[i];
+      
+      // If we have already bent this vertex, skip it!
+      if (processed.has(idx)) continue;
+      
+      // Mark it as processed
+      processed.add(idx);
+      
+      // Access raw coordinates
+      let px = positions[idx * 3];
+      let py = positions[idx * 3 + 1];
+      let pz = positions[idx * 3 + 2];
+
+      // Calculate raw distance from origin
+      let rawDist = 0.0;
+      if (scaleAxis == 0)      
+      {
+        rawDist = px - origin.x;
+      }
+      else if (scaleAxis == 1) 
+      {
+        rawDist = py - origin.y;
+      }
+      else
+      {
+        rawDist = pz - origin.z;
+      }
+
+      // 2. Normalize the distance (0.0 to 1.0)
+      // This ensures the curve shape (parabola) is consistent regardless of mesh scale.
+      // We clamp it between 0 and 1 so the bend doesn't apply "backwards" behind the origin.
+      let normalizedDist = Math.max(0.0, Math.min(1.0, rawDist / maxLength));
+
+      // Apply Quadratic Curve
+      let offset = Math.pow(normalizedDist, 4) * amount;
+
+      if (applicationAxis == 0)
+        positions[idx * 3]     = px + offset;
+      else if (applicationAxis == 1)
+        positions[idx * 3 + 1] = py + offset;
+      else
+        positions[idx * 3 + 2] = pz + offset;
+    }
+}
+
 export function getCentroid(positions, indices) {
     if (!indices || indices.length === 0) return { x: 0, y: 0, z: 0 };
 
@@ -478,15 +529,15 @@ export function create_ring_spline(
     prevScale = scale;
   }
 
-  if (fillStartPole)
-  {
-    let orig_pole_idx = fill_ring_pole(positions, indices, orig_ring, colors, beginPoleOffset, false, color);
-    all_idx.push(...orig_pole_idx);
-  }
   if (fillEndPole) 
   {
     let end_pole_idx = fill_ring_pole(positions, indices, curLoopIdx, colors, endPoleOffset, true, color);
     all_idx.push(...end_pole_idx);
+  }
+  if (fillStartPole)
+  {
+    let orig_pole_idx = fill_ring_pole(positions, indices, orig_ring, colors, beginPoleOffset, false, color);
+    all_idx.push(...orig_pole_idx);
   }
   
   return all_idx;

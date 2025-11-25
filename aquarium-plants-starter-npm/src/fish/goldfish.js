@@ -151,12 +151,12 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     goldfish(
         positions, indices, colors,
         newParams.bodyLength, newParams.bodyHeight, newParams.bodyWidth, newParams.arch,
-        newParams.headSize, newParams.eyeType, newParams.mouthTilt,
-        newParams.caudalLength, newParams.caudalWidth, newParams.caudalType,
-        newParams.dorsalLength, newParams.dorsalWidth, newParams.dorsalShift, newParams.dorsalType,
+        newParams.headSize, eye_types.GOOGLY, newParams.mouthTilt,
+        newParams.caudalLength, newParams.caudalWidth, caudal_types.DROOPY,
+        newParams.dorsalLength, newParams.dorsalWidth, newParams.dorsalShift, dorsal_types.PUNK,
         newParams.pelvicLength, newParams.pelvicWidth, newParams.pelvicShift, newParams.pelvicAngle,
         newParams.pectoralLength, newParams.pectoralWidth, newParams.pectoralShift, newParams.pectoralAngle,
-        newParams.afinLength, newParams.afinWidth, newParams.afinType, newParams.afinShift
+        newParams.afinLength, newParams.afinWidth, afin_types.SPIKY, newParams.afinShift
     );
 
     // 2. Update the GPU buffers (VBOs and IBO)

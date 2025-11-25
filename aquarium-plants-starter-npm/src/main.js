@@ -130,12 +130,6 @@ const afinLength = document.getElementById("afinLength");
 const afinWidth = document.getElementById("afinWidth");
 const afinShift = document.getElementById("afinShift");
 
-// Radio groups (must use name)
-const eyeTypeGroup = document.getElementsByName("eyeType");
-const caudalTypeGroup = document.getElementsByName("caudalType");
-const dorsalTypeGroup = document.getElementsByName("dorsalType");
-const afinTypeGroup = document.getElementsByName("afinType");
-
 // Function to read the currently checked value from a radio group
 const getRadioValue = (group) => {
     for (const radio of group) {
@@ -157,19 +151,16 @@ function readGoldfishParams() {
 
         // head params
         headSize: { x: parseFloat(headSize.value), y: parseFloat(headSize.value), z: parseFloat(headSize.value) }, // Assuming headSize slider affects both X and Y equally for now
-        eyeType: getRadioValue(eyeTypeGroup),
         mouthTilt: parseFloat(mouthTilt.value),
         
         // caudal params
         caudalLength: parseFloat(caudalLength.value),
         caudalWidth: parseFloat(caudalWidth.value),
-        caudalType: getRadioValue(caudalTypeGroup),
         
         // dorsal params
         dorsalLength: parseFloat(dorsalLength.value),
         dorsalWidth: parseFloat(dorsalWidth.value),
         dorsalShift: parseFloat(dorsalShift.value),
-        dorsalType: getRadioValue(dorsalTypeGroup),
         
         // pelvic params
         pelvicLength: parseFloat(pelvicLength.value),
@@ -186,7 +177,6 @@ function readGoldfishParams() {
         // afin params
         afinLength: parseFloat(afinLength.value),
         afinWidth: parseFloat(afinWidth.value),
-        afinType: getRadioValue(afinTypeGroup),
         afinShift: parseFloat(afinShift.value)
     };
 }
@@ -217,7 +207,7 @@ function initGoldfishUI() {
     });
 
     // 2. Radio buttons (Change event fires when a new one is selected)
-    const radioGroups = [eyeTypeGroup, caudalTypeGroup, dorsalTypeGroup, afinTypeGroup];
+    /*const radioGroups = [eyeTypeGroup, caudalTypeGroup, dorsalTypeGroup, afinTypeGroup];
     radioGroups.forEach(group => {
         // group is a NodeList/HTMLCollection, we need to iterate over its elements
         Array.from(group).forEach(radio => {
@@ -225,7 +215,7 @@ function initGoldfishUI() {
                 radio.addEventListener("change", regenerateGoldfish);
             }
         });
-    });
+    });*/
 }
 
 // Initialize the goldfish UI handlers immediately

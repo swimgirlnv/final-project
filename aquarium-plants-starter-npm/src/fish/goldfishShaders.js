@@ -139,13 +139,48 @@ float fbm ( in vec3 _st) {
     return v;
 }
 
+// Based off of a blender node network that tiled better in 2D
+float fish_scale(vec3 pos) {
+  vec3 gridVal1 = (fract(pos) - vec3(0.5, 0.5, 0.5)) * 2.0;
+  vec3 gridVal2 = (fract(pos + vec3(0.5, 0.5, 0.5)) - vec3(0.5, 0.5, 0.5)) * 2.0;
+
+  float zMixFactor = 1.0 - smoothstep(0.0, 0.0, gridVal1.z);
+
+  float len1 = smoothstep(0.9, 1.0, clamp(length(gridVal1), 0.0, 1.0));
+  float len2 = smoothstep(0.9, 1.0, clamp(length(gridVal2), 0.0, 1.0));
+
+  float gridSphere1 = len1 < 1.0? 0.0 : 1.0;
+  float gridSphere2 = len2 < 1.0? 0.0 : 1.0;
+
+  float sphereMix1 = mix(len1, len2, gridSphere1);
+  float sphereMix2 = mix(len2, len1, gridSphere2);
+
+  float sphereMix3 = mix(sphereMix1, len1, zMixFactor);
+  float sphereMix4 = mix(len2, sphereMix2, zMixFactor);
+
+  float finalMix = mix(sphereMix3, sphereMix4, zMixFactor);
+
+  return 1.0 - finalMix;
+}
+
 // Simple caustics look via animated stripes
 float caustic(float x){
   return 0.5 + 0.5*sin(x);
 }
 
+vec3 palette( in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d )
+{
+    return a + b*cos( 6.283185*(c*t+d) );
+}
+
 void main() {
-  vec3 newCol = vec3(fbm(v_pos * 10.0));
+  vec3 scaledPos = vec3(v_pos.x + 1.2, v_pos.y + 1.3, v_pos.z * 2.0);
+  float fishScale = fish_scale(scaledPos * 20.0);
+  float noisy = smoothstep(0.2, 0.6, fbm(v_pos * 10.0));
+
+  float noisyFishScale = mix(fishScale, 1.0 - fishScale, noisy);
+
+  vec3 newCol = vec3(noisyFishScale);
 
   float fog = smoothstep(u_fogNear, u_fogFar, v_camDist); // 0 near -> 1 far
   vec3 col = mix(newCol, u_fogColor, fog);
