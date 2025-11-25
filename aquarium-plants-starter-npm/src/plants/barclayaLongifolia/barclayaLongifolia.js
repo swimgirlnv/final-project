@@ -1,9 +1,10 @@
 // plants/barclayaLongifolia.js
 import { vs, fs } from "./barclayaLongifoliaShaders.js";
 import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
+import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 // ---- Noise + clump field ---------------------------------------------------
-const TANK = { xHalf: 1.6, zHalf: 1.2 }; // overall footprint used for clump cells
+const TANK = { xHalf: TANK_X_HALF, zHalf: TANK_Z_HALF }; // overall footprint used for clump cells
 const CLUMP = {
   cell: 0.9,        // grid cell size → spacing between possible Barclaya clumps
   radius: 0.35,     // how far rosettes spread from a clump center
@@ -298,7 +299,7 @@ export function createBarclayaLayer(gl) {
     minLeaves: 5,
     maxLeaves: 11, // per rosette
     undulFreq: 22.0, // edge ripple frequency
-    spread: { x: 1.55, z: 1.15 }, // tank footprint (used only for fallback singles)
+    spread: { x: TANK_X_HALF * .95, z: TANK_Z_HALF * .95 }, // tank footprint (used only for fallback singles)
     redProb: 0.35, // chance a leaf is magenta-leaning
   };
 

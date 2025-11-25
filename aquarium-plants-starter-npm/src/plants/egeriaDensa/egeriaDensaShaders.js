@@ -43,16 +43,25 @@ void main(){
 
   vec3 base = vec3(i_originXZ.x, i_originYLen.x, i_originXZ.y);
 
-  // Leaf/stem frames
-  vec3 up = vec3(0.0,1.0,0.0);
+    // Leaf/stem frames
+  vec3 up = vec3(0.0, 1.0, 0.0);
   float phi  = i_phiTilt.x;
   float tilt = clamp(i_phiTilt.y, 0.0, 1.0);
-  vec3 radial   = vec3(cos(phi), 0.0, sin(phi));                 // outward from stem
+
+  // radial = outward from the stem in XZ (used to orient leaves around the stem)
+  vec3 radial   = vec3(cos(phi), 0.0, sin(phi));
+
+  // tangent = along the stem/leaf axis
   vec3 tanLeaf  = normalize(mix(radial, up, tilt));
-  vec3 tangent  = mix(tanLeaf, up, isStem);                      // stems force vertical
-  vec3 ref      = abs(dot(tangent, up)) > 0.95 ? vec3(1,0,0) : up;
-  vec3 binorm   = normalize(cross(tangent, ref));
-  vec3 normal   = normalize(cross(binorm, tangent));
+  vec3 tangent  = mix(tanLeaf, up, isStem);   // stems are more vertical
+
+  // Choose width direction from radial, with a fallback to avoid degeneracy
+  vec3 widthDir = normalize(radial);
+  if (length(cross(tangent, widthDir)) < 1e-3) {
+    widthDir = normalize(cross(tangent, vec3(1.0, 0.0, 0.0)));
+  }
+
+  vec3 normal = normalize(cross(tangent, widthDir));
 
   // Shape profiles
   float s = t*(1.0 - t);                                        // 0 at ends, peak mid
@@ -92,7 +101,7 @@ void main(){
   // gl_Position = u_proj * u_view * vec4(P, 1.0);
 
   // Color
-  vec3 stemC = h2rgb(hue) * vec3(0.22, 0.90, 0.35);
+  vec3 stemC = h2rgb(hue) * vec3(0.18, 0.65, 0.25);
   vec3 leafC = h2rgb(hue + 0.02) * vec3(0.55, 1.05, 0.60);
   vec3 col   = mix(leafC, stemC, isStem);
   col *= 0.9 + 0.25 * smoothstep(0.6, 1.0, t);

@@ -1,7 +1,8 @@
-// Bounds match tank floor
+import { TANK_X_HALF, TANK_Z_HALF } from "./tankFloor";
+
 export const PLANT_BOUNDS = {
-  xHalf: 2.6,
-  zHalf: 2.2,
+  xHalf: TANK_X_HALF * 0.98,
+  zHalf: TANK_Z_HALF * 0.98,
 };
 
 // --- simple 2D value noise ------------------------------------
@@ -34,22 +35,20 @@ function valueNoise2D(px, pz) {
 export function sampleClumpedPosition({
   xHalf = PLANT_BOUNDS.xHalf,
   zHalf = PLANT_BOUNDS.zHalf,
-  freq = 0.6,        // lower = bigger patches, higher = smaller patches
-  threshold = 0.6,   // how strong noise must be to accept a point
+  freq = 0.6,
+  threshold = 0.6,
   maxTries = 32,
 } = {}) {
   for (let tries = 0; tries < maxTries; tries++) {
     const x = (Math.random() * 2 - 1) * xHalf;
     const z = (Math.random() * 2 - 1) * zHalf;
 
-    const n = valueNoise2D(x * freq, z * freq); // 0..1
-
+    const n = valueNoise2D(x * freq, z * freq);
     if (n >= threshold) {
       return { x, z, noise: n };
     }
   }
-
-  // Fallback: random point if we somehow don't hit a clump
+  // fallback
   const x = (Math.random() * 2 - 1) * xHalf;
   const z = (Math.random() * 2 - 1) * zHalf;
   const n = valueNoise2D(x * freq, z * freq);

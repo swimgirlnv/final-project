@@ -1,5 +1,8 @@
 import { vs, fs } from "./grassShaders";
 import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
+import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
+
+const TANK = { xHalf: TANK_X_HALF, zHalf: TANK_Z_HALF }; // world half-extents in X/Z
 
 export function createGrassLayer(gl) {
   function compile(type, src) {
@@ -29,9 +32,6 @@ export function createGrassLayer(gl) {
   // ---------------------------------------------------------------------------
   // Noise helpers
   // ---------------------------------------------------------------------------
-
-  const FLOOR_X_HALF = 1.6;
-  const FLOOR_Z_HALF = 1.2;
 
   function fract(v) {
     return v - Math.floor(v);
@@ -170,7 +170,7 @@ export function createGrassLayer(gl) {
   const u_fogFar = U("u_fogFar");
 
   const state = {
-    count: +document.getElementById("plantCount")?.value || 200,
+    count: +document.getElementById("plantCount")?.value || 600,
     avgH: 1.0,
     flex: 1.4,
   };
@@ -198,16 +198,16 @@ export function createGrassLayer(gl) {
     const maxAttempts = state.count * 40;
 
     // noise → density controls
-    const FREQ = 0.6;            // lower = bigger clumps, higher = smaller/patchier
-    const BASE_DENSITY = 0.30;   // minimum chance to place grass everywhere
+    const FREQ = 0.6; // lower = bigger clumps, higher = smaller/patchier
+    const BASE_DENSITY = 0.3; // minimum chance to place grass everywhere
     const CLUMP_STRENGTH = 0.55; // how much noise boosts density (0..1)
 
     while (d.count < state.count && attempts < maxAttempts) {
       attempts++;
 
       // sample uniformly over full floor bounds
-      const x = (Math.random() * 2 - 1) * FLOOR_X_HALF;
-      const z = (Math.random() * 2 - 1) * FLOOR_Z_HALF;
+      const x = (Math.random() * 2 - 1) * TANK_X_HALF;
+      const z = (Math.random() * 2 - 1) * TANK_Z_HALF;
 
       // let plants get much closer to the walls:
       // use tiny padding (or comment this out if you want *all* the way to the edge)

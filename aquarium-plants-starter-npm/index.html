@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Virtual Aquarium — Plants Starter (WebGL2)</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐠</text></svg>">
     <style>
       html,
       body {
@@ -185,6 +186,7 @@
       <!-- Icon Sidebar -->
       <div id="iconSidebar">
         <div class="icon-btn" data-section="general" title="General">⚙️</div>
+        <div class="icon-btn" data-section="fish" title="Goldfish">🐠</div>
         <div class="icon-btn" data-section="grass" title="Grass">🌿</div>
         <div class="icon-btn" data-section="egeria" title="Egeria">🪴</div>
         <div class="icon-btn" data-section="barclaya" title="Barclaya">🍃</div>
@@ -211,6 +213,88 @@
           <label><input id="showFishHouse" type="checkbox" checked /> Show fish house</label>
           
           <button class="btn" id="regenerate">Regenerate All</button>
+
+          <label>Tank Size</label>
+          <input id="tankSize" type="range" min="1.0" max="100.0" step="0.01" value="50.0" />
+          
+        </div>
+        
+        <!-- Fish Controls -->
+        <div class="control-section" id="section-fish">
+          <h1>🐠 Goldfish</h1>
+          
+          <h2>Body</h2>
+          <label>Body Length</label>
+          <input id="bodyLength" type="range" min="0.5" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Body Height</label>
+          <input id="bodyHeight" type="range" min="0.3" max="1.5" step="0.01" value="0.8" />
+          
+          <label>Body Width</label>
+          <input id="bodyWidth" type="range" min="0.3" max="1.2" step="0.01" value="0.6" />
+          
+          <label>Arch</label>
+          <input id="arch" type="range" min="0.0" max="1.0" step="0.01" value="0.5" />
+          
+          <h2>Head</h2>
+          <label>Head Size</label>
+          <input id="headSize" type="range" min="0.5" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Mouth Tilt</label>
+          <input id="mouthTilt" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <h2>Caudal Fin (Tail)</h2>
+          <label>Caudal Length</label>
+          <input id="caudalLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Caudal Width</label>
+          <input id="caudalWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <h2>Dorsal Fin (Top)</h2>
+          <label>Dorsal Length</label>
+          <input id="dorsalLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Dorsal Width</label>
+          <input id="dorsalWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Dorsal Shift</label>
+          <input id="dorsalShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <h2>Pelvic Fins (Bottom)</h2>
+          <label>Pelvic Length</label>
+          <input id="pelvicLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pelvic Width</label>
+          <input id="pelvicWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pelvic Shift</label>
+          <input id="pelvicShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <label>Pelvic Angle</label>
+          <input id="pelvicAngle" type="range" min="-1.57" max="1.57" step="0.01" value="0.0" />
+          
+          <h2>Pectoral Fins (Side)</h2>
+          <label>Pectoral Length</label>
+          <input id="pectoralLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pectoral Width</label>
+          <input id="pectoralWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pectoral Shift</label>
+          <input id="pectoralShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <label>Pectoral Angle</label>
+          <input id="pectoralAngle" type="range" min="-1.57" max="1.57" step="0.01" value="0.0" />
+          
+          <h2>Anal Fin (Bottom Rear)</h2>
+          <label>Anal Fin Length</label>
+          <input id="afinLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Anal Fin Width</label>
+          <input id="afinWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Anal Fin Shift</label>
+          <input id="afinShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
         </div>
         
         <!-- Grass Controls -->

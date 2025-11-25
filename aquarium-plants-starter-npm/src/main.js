@@ -1,12 +1,12 @@
 // src/main.js
 import { createEgeriaLayer } from "./plants/egeriaDensa/egeriaDensa.js";
 import { createGrassLayer } from "./plants/grass/grass.js";
-import { createFloorLayer } from "./tank/tankFloor.js";
+import { createFloorLayer, setTankSize } from "./tank/tankFloor.js";
 import { createBarclayaLayer } from "./plants/barclayaLongifolia/barclayaLongifolia.js";
 import { createDriftwoodLayer } from "./decorations/driftwood/driftwood.js";
 import { createBoulderLayer } from "./decorations/boulder/boulder.js";
 import { createFishHouseLayer } from "./decorations/fishHouse/fishHouse.js";
-import { resetCollisionState } from "./sceneCollision.js";
+import { resetCollisionState, updateTankBounds } from "./sceneCollision.js";
 import { createGoldfish, regenerateGoldfishGeometry } from "./fish/goldfish.js";
 
 /* ---------- Helpers ---------- */
@@ -102,7 +102,7 @@ const currentStrength = 0;
 const currentAngle = -3.14;
 
 // grass controls
-const plantCount = document.getElementById("plantCount");
+const plantCount = document.getElementById("plantCount"); // not actually plant count, changes everything put in main settings
 const plantCountLabel = document.getElementById("plantCountLabel");
 const flex = document.getElementById("flex");
 const heightAvg = document.getElementById("height");
@@ -139,6 +139,7 @@ const floorGravelBump = document.getElementById("floorGravelBump");
 const palSand = document.getElementById("floorPalSand");
 const palGrey = document.getElementById("floorPalGrey");
 const palRainbow = document.getElementById("floorPalRainbow");
+const tankSize = document.getElementById("tankSize");
 
 // goldfish controls
 const bodyLength = document.getElementById("bodyLength");
@@ -335,8 +336,8 @@ floor.setFloorFog(0.55, 0.12);
 const driftwood = createDriftwoodLayer(gl);
 const fishHouse = createFishHouseLayer(gl);
 const boulders = createBoulderLayer(gl);
-const barclaya = createBarclayaLayer(gl);
 const egeria = createEgeriaLayer(gl);
+const barclaya = createBarclayaLayer(gl);
 const grass = createGrassLayer(gl);
 const gfish = createGoldfish(gl);
 
@@ -525,6 +526,19 @@ palRainbow?.addEventListener(
   "change",
   () => palRainbow.checked && floor.setPalette("rainbow")
 );
+
+tankSize?.addEventListener("input", () => {
+  setTankSize(+tankSize.value);
+  floor.regenerate();
+  updateTankBounds();
+  resetCollisionState();
+  driftwood.regenerate();
+  boulders.regenerate();
+  fishHouse.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
 
 /* ---------- Render loop ---------- */
 let last = performance.now(),
