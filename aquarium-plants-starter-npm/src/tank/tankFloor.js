@@ -1,8 +1,9 @@
 import { vs, fs } from "./tankFloorShaders";
 
 // Single source of truth for tank size
-export let TANK_X_HALF = 2.6; // was 1.6
-export let TANK_Z_HALF = 2.2; // was 1.2
+export let TANK_X_HALF = 2.6;
+export let TANK_Z_HALF = 2.2;
+const SAND_DEPTH = 0.55;
 
 // Function to update tank dimensions
 export function setTankSize(scale) {

@@ -2,7 +2,6 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/final-project/',
   server: {
     port: 5173,
     open: true
@@ -10,5 +9,9 @@ export default defineConfig({
   preview: {
     port: 5173,
     open: true
+  },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets'
   }
 })

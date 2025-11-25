@@ -208,6 +208,10 @@ export function createFishHouseLayer(gl) {
       model[14] = z;
     },
     draw(shared) {
+      // --- temporarily disable back-face culling for the house (body + leaves) ---
+      const cullWasOn = gl.isEnabled(gl.CULL_FACE);
+      if (cullWasOn) gl.disable(gl.CULL_FACE);
+
       gl.useProgram(prog);
       gl.bindVertexArray(vao);
       gl.uniformMatrix4fv(u_proj, false, shared.proj);
@@ -224,6 +228,8 @@ export function createFishHouseLayer(gl) {
       gl.uniform1f(u_fogFar, shared.fogFar);
 
       gl.drawElements(gl.TRIANGLES, mesh.idx.length, gl.UNSIGNED_SHORT, 0);
+
+      if (cullWasOn) gl.enable(gl.CULL_FACE);
     },
   };
 }
