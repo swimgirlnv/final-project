@@ -7,6 +7,7 @@ import { createDriftwoodLayer } from "./decorations/driftwood/driftwood.js";
 import { createBoulderLayer } from "./decorations/boulder/boulder.js";
 import { createFishHouseLayer } from "./decorations/fishHouse/fishHouse.js";
 import { resetCollisionState } from "./sceneCollision.js";
+import { createGoldfish, regenerateGoldfishGeometry } from "./fish/goldfish.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -139,6 +140,121 @@ const palSand = document.getElementById("floorPalSand");
 const palGrey = document.getElementById("floorPalGrey");
 const palRainbow = document.getElementById("floorPalRainbow");
 
+// goldfish controls
+const bodyLength = document.getElementById("bodyLength");
+const bodyHeight = document.getElementById("bodyHeight");
+const bodyWidth = document.getElementById("bodyWidth");
+const arch = document.getElementById("arch");
+const headSize = document.getElementById("headSize");
+const mouthTilt = document.getElementById("mouthTilt");
+const caudalLength = document.getElementById("caudalLength");
+const caudalWidth = document.getElementById("caudalWidth");
+const dorsalLength = document.getElementById("dorsalLength");
+const dorsalWidth = document.getElementById("dorsalWidth");
+const dorsalShift = document.getElementById("dorsalShift");
+const pelvicLength = document.getElementById("pelvicLength");
+const pelvicWidth = document.getElementById("pelvicWidth");
+const pelvicShift = document.getElementById("pelvicShift");
+const pelvicAngle = document.getElementById("pelvicAngle");
+const pectoralLength = document.getElementById("pectoralLength");
+const pectoralWidth = document.getElementById("pectoralWidth");
+const pectoralShift = document.getElementById("pectoralShift");
+const pectoralAngle = document.getElementById("pectoralAngle");
+const afinLength = document.getElementById("afinLength");
+const afinWidth = document.getElementById("afinWidth");
+const afinShift = document.getElementById("afinShift");
+
+// Function to read the currently checked value from a radio group
+const getRadioValue = (group) => {
+    for (const radio of group) {
+        if (radio.checked) {
+            return radio.value;
+        }
+    }
+    // Return a default or the first value if nothing is checked (safer for initialization)
+    return group[0] ? group[0].value : null; 
+};
+
+function readGoldfishParams() {
+    return {
+        // body params (float values from sliders)
+        bodyLength: parseFloat(bodyLength.value),
+        bodyHeight: parseFloat(bodyHeight.value),
+        bodyWidth: parseFloat(bodyWidth.value),
+        arch: parseFloat(arch.value),
+
+        // head params
+        headSize: { x: parseFloat(headSize.value), y: parseFloat(headSize.value), z: parseFloat(headSize.value) }, // Assuming headSize slider affects both X and Y equally for now
+        mouthTilt: parseFloat(mouthTilt.value),
+        
+        // caudal params
+        caudalLength: parseFloat(caudalLength.value),
+        caudalWidth: parseFloat(caudalWidth.value),
+        
+        // dorsal params
+        dorsalLength: parseFloat(dorsalLength.value),
+        dorsalWidth: parseFloat(dorsalWidth.value),
+        dorsalShift: parseFloat(dorsalShift.value),
+        
+        // pelvic params
+        pelvicLength: parseFloat(pelvicLength.value),
+        pelvicWidth: parseFloat(pelvicWidth.value),
+        pelvicShift: parseFloat(pelvicShift.value),
+        pelvicAngle: parseFloat(pelvicAngle.value),
+        
+        // pectoral params
+        pectoralLength: parseFloat(pectoralLength.value),
+        pectoralWidth: parseFloat(pectoralWidth.value),
+        pectoralShift: parseFloat(pectoralShift.value),
+        pectoralAngle: parseFloat(pectoralAngle.value),
+        
+        // afin params
+        afinLength: parseFloat(afinLength.value),
+        afinWidth: parseFloat(afinWidth.value),
+        afinShift: parseFloat(afinShift.value)
+    };
+}
+
+function regenerateGoldfish() {
+    const params = readGoldfishParams();
+    regenerateGoldfishGeometry(gl, gfish.geometry, params);
+}
+
+/**
+ * Wires up all goldfish UI elements to the regeneration function.
+ */
+function initGoldfishUI() {
+    // 1. Sliders (Input event fires continuously while dragging)
+    const sliders = [
+        bodyLength, bodyHeight, bodyWidth, arch,
+        headSize, mouthTilt,
+        caudalLength, caudalWidth,
+        dorsalLength, dorsalWidth, dorsalShift,
+        pelvicLength, pelvicWidth, pelvicShift, pelvicAngle,
+        pectoralLength, pectoralWidth, pectoralShift, pectoralAngle,
+        afinLength, afinWidth, afinShift
+    ];
+    sliders.forEach(slider => {
+        if (slider) {
+            slider.addEventListener("input", regenerateGoldfish);
+        }
+    });
+
+    // 2. Radio buttons (Change event fires when a new one is selected)
+    /*const radioGroups = [eyeTypeGroup, caudalTypeGroup, dorsalTypeGroup, afinTypeGroup];
+    radioGroups.forEach(group => {
+        // group is a NodeList/HTMLCollection, we need to iterate over its elements
+        Array.from(group).forEach(radio => {
+            if (radio) {
+                radio.addEventListener("change", regenerateGoldfish);
+            }
+        });
+    });*/
+}
+
+// Initialize the goldfish UI handlers immediately
+initGoldfishUI();
+
 /* ---------- Orbit camera ---------- */
 const cam = {
   target: [0, 0.9, 0],
@@ -222,6 +338,7 @@ const boulders = createBoulderLayer(gl);
 const barclaya = createBarclayaLayer(gl);
 const egeria = createEgeriaLayer(gl);
 const grass = createGrassLayer(gl);
+const gfish = createGoldfish(gl);
 
 const FOG = { color: [0.02, 0.07, 0.13], near: 2.0, far: 5.5 };
 floor.setFog(FOG.color, FOG.near, FOG.far);
@@ -488,4 +605,5 @@ let last = performance.now(),
   if (showGrass?.checked !== false) grass.draw(shared);
   if (showEgeria?.checked !== false) egeria.draw(shared);
   if (showBarclaya?.checked !== false) barclaya.draw(shared);
+  gfish.draw(shared);
 })();
