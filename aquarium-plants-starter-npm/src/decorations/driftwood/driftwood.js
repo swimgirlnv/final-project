@@ -1,5 +1,6 @@
 // decorations/driftwood/driftwood.js
 import { vs, fs } from "./driftwoodShaders.js";
+import { findValidPosition, registerObject } from "../../sceneCollision.js";
 
 export function createDriftwoodLayer(gl) {
   // --- compile/link
@@ -339,11 +340,15 @@ export function createDriftwoodLayer(gl) {
     const SIDES = Math.max(10, Math.min(24, Math.round(6 + state.detail * 18)));
 
     for (let k = 0; k < state.pieces; k++) {
-      const base = {
-        x: rand(-TANK.xHalf + 0.2, TANK.xHalf - 0.2),
-        y: rand(0.03, 0.06),
-        z: rand(-TANK.zHalf + 0.2, TANK.zHalf - 0.2),
-      };
+      // Use collision system to find valid driftwood position
+      const woodRadius = rand(state.trunkRadius[0], state.trunkRadius[1]) * 3.0; // approximate footprint
+      const pos = findValidPosition(woodRadius, 50, 0.08);
+      const base = pos ? 
+        { x: pos.x, y: rand(0.03, 0.06), z: pos.z } :
+        { x: rand(-TANK.xHalf + 0.2, TANK.xHalf - 0.2), y: rand(0.03, 0.06), z: rand(-TANK.zHalf + 0.2, TANK.zHalf - 0.2) };
+      
+      if (pos) registerObject(pos.x, pos.z, woodRadius, 'driftwood');
+      
       const yaw = rand(0, TAU);
       const dir = { x: Math.cos(yaw), y: 0.15, z: Math.sin(yaw) };
 

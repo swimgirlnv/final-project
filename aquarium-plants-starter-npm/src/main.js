@@ -4,6 +4,9 @@ import { createGrassLayer } from "./plants/grass/grass.js";
 import { createFloorLayer } from "./tank/tankFloor.js";
 import { createBarclayaLayer } from "./plants/barclayaLongifolia/barclayaLongifolia.js";
 import { createDriftwoodLayer } from "./decorations/driftwood/driftwood.js";
+import { createBoulderLayer } from "./decorations/boulder/boulder.js";
+import { createFishHouseLayer } from "./decorations/fishHouse/fishHouse.js";
+import { resetCollisionState } from "./sceneCollision.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -91,6 +94,8 @@ const showGrass = document.getElementById("showGrass");
 const showEgeria = document.getElementById("showEgeria");
 const showBarclaya = document.getElementById("showBarclaya");
 const showWood = document.getElementById("showWood");
+const showBoulders = document.getElementById("showBoulders");
+const showFishHouse = document.getElementById("showFishHouse");
 
 const currentStrength = 0;
 const currentAngle = -3.14;
@@ -119,6 +124,11 @@ const woodDetail = document.getElementById("woodDetail");
 const woodGrain = document.getElementById("woodGrain");
 const woodGrainMix = document.getElementById("woodGrainMix");
 const woodWarm = document.getElementById("woodWarm");
+
+// boulder controls
+const boulderCount = document.getElementById("boulderCount");
+const boulderCountLabel = document.getElementById("boulderCountLabel");
+const boulderRegenerate = document.getElementById("boulderRegenerate");
 
 // tank floor controls
 const floorGravelMix = document.getElementById("floorGravelMix");
@@ -204,10 +214,14 @@ gl.clearColor(0.02, 0.07, 0.13, 1);
 
 const floor = createFloorLayer(gl);
 floor.setFloorFog(0.55, 0.12);
-const grass = createGrassLayer(gl);
-const egeria = createEgeriaLayer(gl);
-const barclaya = createBarclayaLayer(gl);
+
+// Create layers in collision order: large decorations first, then plants
 const driftwood = createDriftwoodLayer(gl);
+const fishHouse = createFishHouseLayer(gl);
+const boulders = createBoulderLayer(gl);
+const barclaya = createBarclayaLayer(gl);
+const egeria = createEgeriaLayer(gl);
+const grass = createGrassLayer(gl);
 
 const FOG = { color: [0.02, 0.07, 0.13], near: 2.0, far: 5.5 };
 floor.setFog(FOG.color, FOG.near, FOG.far);
@@ -223,19 +237,34 @@ if (plantCount)
   plantCount.addEventListener("input", () => {
     grass.setCount(+plantCount.value);
     updateCountLabel();
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
     grass.regenerate();
   });
 if (flex) flex.addEventListener("input", () => grass.setFlex(+flex.value));
 if (heightAvg)
   heightAvg.addEventListener("input", () => {
     grass.setAvgHeight(+heightAvg.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
     grass.regenerate();
   });
 
 if (egCount)
   egCount.addEventListener("input", () => {
     egeria.setCount(+egCount.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
 if (egWidth)
   egWidth.addEventListener("input", () =>
@@ -244,44 +273,87 @@ if (egWidth)
 if (egNodes)
   egNodes.addEventListener("input", () => {
     egeria.setNodes(+egNodes.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
 if (egBranch)
   egBranch.addEventListener("input", () => {
     egeria.setBranchChance(+egBranch.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
 
 if (scatterBtn)
   scatterBtn.addEventListener("click", () => {
-    grass.regenerate();
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
 if (regenBtn)
   regenBtn.addEventListener("click", () => {
-    grass.regenerate();
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
 
 woodPieces?.addEventListener("input", () => {
   driftwood.setPieces(+woodPieces.value);
+  resetCollisionState();
   driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
 });
 woodBranches?.addEventListener("input", () => {
   driftwood.setBranches(+woodBranches.value);
+  resetCollisionState();
   driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
 });
 woodGnarl?.addEventListener("input", () => {
   driftwood.setGnarl(+woodGnarl.value);
+  resetCollisionState();
   driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
 });
 woodTwist?.addEventListener("input", () => {
   driftwood.setTwist(+woodTwist.value);
+  resetCollisionState();
   driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
 });
 woodDetail?.addEventListener("input", () => {
   driftwood.setDetail(+woodDetail.value);
+  resetCollisionState();
   driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
 });
 woodGrain?.addEventListener("input", () =>
   driftwood.setGrainFreq(+woodGrain.value)
@@ -290,6 +362,28 @@ woodGrainMix?.addEventListener("input", () =>
   driftwood.setGrainMix(+woodGrainMix.value)
 );
 woodWarm?.addEventListener("input", () => driftwood.setWarm(+woodWarm.value));
+
+if (boulderCountLabel && boulderCount)
+  boulderCountLabel.textContent = String(boulderCount.value);
+if (boulderCount)
+  boulderCount.addEventListener("input", () => {
+    boulderCountLabel.textContent = String(boulderCount.value);
+    boulders.setCount(+boulderCount.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
+    grass.regenerate();
+  });
+if (boulderRegenerate) boulderRegenerate.addEventListener("click", () => {
+  resetCollisionState();
+  driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
 
 floorGravelMix?.addEventListener("input", () =>
   floor.setGravelMix(+floorGravelMix.value)
@@ -389,6 +483,8 @@ let last = performance.now(),
   // draw
   floor.draw(shared);
   if (showWood?.checked !== false) driftwood.draw(shared);
+  if (showBoulders?.checked !== false) boulders.draw(shared);
+  if (showFishHouse?.checked !== false) fishHouse.draw(shared);
   if (showGrass?.checked !== false) grass.draw(shared);
   if (showEgeria?.checked !== false) egeria.draw(shared);
   if (showBarclaya?.checked !== false) barclaya.draw(shared);

@@ -11,7 +11,7 @@ uniform float u_scale;        // macro dune frequency
 // Gravel controls
 uniform float u_gravelMix;    // 0=sand, 1=full gravel
 uniform float u_gravelScale;  // pebbles per unit (density)
-uniform float u_gravelBump;   // extra normal bump from gravel (0..~0.05)
+uniform float u_gravelBump;   // height of gravel domes (0..~0.06)
 
 // Palette selection: 0 sand, 1 grey gravel, 2 rainbow gravel
 uniform int   u_palette;
@@ -27,17 +27,21 @@ out float v_camDist;
 float fract1(float x){ return x - floor(x); }
 float hash2(float i, float j){ return fract1(sin(i*127.1 + j*311.7)*43758.5453); }
 float vnoise(vec2 p){
-  vec2 i=floor(p), f=fract(p);
-  float a=hash2(i.x,i.y);
-  float b=hash2(i.x+1.0,i.y);
-  float c=hash2(i.x,i.y+1.0);
-  float d=hash2(i.x+1.0,i.y+1.0);
-  vec2 u=f*f*(3.0-2.0*f);
+  vec2 i = floor(p), f = fract(p);
+  float a = hash2(i.x, i.y);
+  float b = hash2(i.x+1.0, i.y);
+  float c = hash2(i.x, i.y+1.0);
+  float d = hash2(i.x+1.0, i.y+1.0);
+  vec2 u = f*f*(3.0-2.0*f);
   return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
 }
 float fbm(vec2 p){
-  float f=0.0, a=0.5, fr=1.0;
-  for(int k=0;k<4;k++){ f+=a*vnoise(p*fr); a*=0.5; fr*=2.0; }
+  float f = 0.0, a = 0.5, fr = 1.0;
+  for (int k=0; k<4; k++){
+    f += a * vnoise(p * fr);
+    a *= 0.5;
+    fr *= 2.0;
+  }
   return f;
 }
 
@@ -54,81 +58,103 @@ vec3 h2rgb(float h){
 }
 
 // Worley-like (nearest-jittered-cell) distance + cell id
-// returns min distance in [0..~1] and cell seed (for color)
+// returns (min distance in [0..~1], cellX, cellY)
 vec3 cellInfo(vec2 p){
-  vec2 g = p * u_gravelScale;
+  vec2 g  = p * u_gravelScale;
   vec2 gi = floor(g);
   vec2 gf = fract(g);
   float minD = 1e9;
   vec2  minCell = vec2(0.0);
-  for(int j=-1;j<=1;j++){
-    for(int i=-1;i<=1;i++){
+  for (int j=-1; j<=1; j++){
+    for (int i=-1; i<=1; i++){
       vec2 o = vec2(float(i), float(j));
       vec2 c = gi + o;
-      // jittered center inside the cell
-      vec2 rnd = vec2(hash12(c), hash12(c+19.19));
-      vec2 center = o + rnd;
+      vec2 rnd = vec2(hash12(c), hash12(c + 19.19));
+      vec2 center = o + rnd;        // jittered center in this cell
       float d = length(center - gf);
-      if (d < minD){ minD = d; minCell = c; }
+      if (d < minD){
+        minD    = d;
+        minCell = c;
+      }
     }
   }
-  // normalize distance a bit to 0..1 range
   minD = clamp(minD, 0.0, 1.0);
   return vec3(minD, minCell);
+}
+
+// Full height: dunes + gravel domes
+float groundHeight(vec2 p){
+  // macro dunes
+  float dunes = (fbm(p * u_scale) - 0.5) * u_amp - 0.03;
+
+  // no gravel? just dunes
+  if (u_gravelMix <= 0.001 || u_gravelScale <= 0.5 || u_gravelBump <= 0.0) {
+    return dunes;
+  }
+
+  vec3 ci = cellInfo(p);
+  float d  = ci.x; // distance to nearest pebble center
+
+  // dome shape: 1 in center, 0 by ~0.8
+  float m = 1.0 - smoothstep(0.0, 0.8, d);
+  m *= u_gravelMix;
+
+  float pebble = u_gravelBump * m;
+  return dunes + pebble;
 }
 
 void main(){
   vec2 p = a_xz;
 
-  // --- Macro dunes height (kept slightly below y=0 so plants sit above)
-  float dunes = (fbm(p * u_scale) - 0.5) * u_amp - 0.03;
+  // height & derivatives (for good normals)
+  float h = groundHeight(p);
+  float e = 0.02;
 
-  // --- Gravel mask / color (view only; does not change macro height)
+  float h_x1 = groundHeight(p + vec2(e, 0.0));
+  float h_x2 = groundHeight(p - vec2(e, 0.0));
+  float h_z1 = groundHeight(p + vec2(0.0, e));
+  float h_z2 = groundHeight(p - vec2(0.0, e));
+
+  float dhdx = (h_x1 - h_x2) / (2.0 * e);
+  float dhdz = (h_z1 - h_z2) / (2.0 * e);
+
+  vec3 n = normalize(vec3(-dhdx, 1.0, -dhdz));
+
+  // --- color: sand + gravel tint ---
   vec3 ci  = cellInfo(p);
-  float d  = ci.x;                         // distance to pebble center
-  float mask = 1.0 - smoothstep(0.55, 0.15, d); // 1 at centers, 0 at edges
+  float d  = ci.x;
+  float mask = 1.0 - smoothstep(0.0, 0.8, d);
   mask *= u_gravelMix;
 
-  // Per-pebble base color from palette
   vec3 gravelCol;
   if (u_palette == 1) {
-    // grey gravel: vary lightness slightly per cell
-    float g = 0.45 + 0.45*hash12(ci.yz);
+    // grey gravel
+    float g = 0.45 + 0.45 * hash12(ci.yz);
     gravelCol = vec3(g) * vec3(1.0, 0.98, 0.96);
   } else if (u_palette == 2) {
-    // rainbow gravel: hue per cell
-    float h = hash12(ci.yz);
-    gravelCol = h2rgb(h) * (0.75 + 0.35*hash11(h*91.7));
+    // rainbow gravel
+    float hcol = hash12(ci.yz);
+    gravelCol = h2rgb(hcol) * (0.75 + 0.35 * hash11(hcol * 91.7));
   } else {
-    // sand-tinted "shell chips"
-    float t = 0.7 + 0.3*hash12(ci.yz+7.0);
+    // warm shell-like gravel
+    float t = 0.7 + 0.3 * hash12(ci.yz + 7.0);
     gravelCol = mix(u_sandA, u_sandB, t);
   }
 
-  // Base sand shading with top light
-  float e = 0.02;
-  float dunes_px = ((fbm((p+vec2(e,0.0))*u_scale) - fbm((p-vec2(e,0.0))*u_scale)) * u_amp) / (2.0*e);
-  float dunes_pz = ((fbm((p+vec2(0.0,e))*u_scale) - fbm((p-vec2(0.0,e))*u_scale)) * u_amp) / (2.0*e);
-
-  // add a little gravel "micro normal" from mask gradient
-  float m_px = ( (1.0 - smoothstep(0.55,0.15, cellInfo(p+vec2(e,0.0)).x))
-               - (1.0 - smoothstep(0.55,0.15, cellInfo(p-vec2(e,0.0)).x)) ) * 0.5 / e;
-  float m_pz = ( (1.0 - smoothstep(0.55,0.15, cellInfo(p+vec2(0.0,e)).x))
-               - (1.0 - smoothstep(0.55,0.15, cellInfo(p-vec2(0.0,e)).x)) ) * 0.5 / e;
-
-  vec3 n = normalize(vec3(-(dunes_px + u_gravelBump*m_px), 1.0, -(dunes_pz + u_gravelBump*m_pz)));
-
   vec3 L = normalize(vec3(-0.2, 1.0, 0.3));
   float ndl = clamp(dot(n, L), 0.0, 1.0);
-  vec3 sand = mix(u_sandA, u_sandB, 0.5 + 0.5*ndl);
-  sand *= 0.95 + 0.1 * smoothstep(-0.08, 0.06, dunes);
 
-  // Mix sand with gravel color by mask
+  // sand shading
+  vec3 sand = mix(u_sandA, u_sandB, 0.4 + 0.6 * ndl);
+  // brighter on higher dunes
+  sand *= 0.95 + 0.1 * smoothstep(-0.10, 0.08, h);
+
+  // mix sand ↔ gravel
   vec3 baseCol = mix(sand, gravelCol, mask);
 
   // outputs
   v_color = baseCol;
-  vec3 world = vec3(p.x, dunes, p.y);
+  vec3 world = vec3(p.x, h, p.y);
   vec4 V = u_view * vec4(world, 1.0);
   v_camDist = length(V.xyz);
   gl_Position = u_proj * V;

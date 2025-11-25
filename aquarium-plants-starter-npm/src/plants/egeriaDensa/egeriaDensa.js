@@ -1,6 +1,7 @@
 // Egeria densa as a layer: expose {draw, regenerate, set*}
 
 import { vs, fs } from "./egeriaDensaShaders.js";
+import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
 
 const TANK = { xHalf: 1.6, zHalf: 1.2 }; // world half-extents in X/Z
 const CLUMP = {
@@ -210,7 +211,7 @@ export function createEgeriaLayer(gl) {
     leafWidthScale: 0.85,
   };
 
-  function regenerate() {
+    function regenerate() {
     const data = {
       originXZ: [],
       originYLen: [],
@@ -221,6 +222,7 @@ export function createEgeriaLayer(gl) {
     };
 
     const seed = Math.random() * 1000.0;
+    const stemRadius = 0.04; // footprint used for both clumps and singles
 
     // Build a coarse grid of potential clump centers
     const nx = Math.max(1, Math.floor((2 * TANK.xHalf) / CLUMP.cell));
@@ -230,9 +232,10 @@ export function createEgeriaLayer(gl) {
 
     let planted = 0;
 
+    // ----- CLUMPED STEMS ----------------------------------------------------
     for (let gx = 0; gx < nx && planted < state.stems; gx++) {
       for (let gz = 0; gz < nz && planted < state.stems; gz++) {
-        // cell center
+        // cell center in world-space
         const cx = -TANK.xHalf + (gx + 0.5) * dx;
         const cz = -TANK.zHalf + (gz + 0.5) * dz;
 
@@ -242,9 +245,9 @@ export function createEgeriaLayer(gl) {
           (cz - seed) * CLUMP.noiseScale,
           4
         );
-        if (n < CLUMP.threshold) continue; // empty cell = spacing between clumps
+        if (n < CLUMP.threshold) continue; // empty cell = space between clumps
 
-        // Clump size 1–5 (capped by remaining stems)
+        // group size 1–5 (clamped to remaining stems)
         const group = Math.min(
           1 + Math.floor(rand(0, 5)),
           state.stems - planted
@@ -254,45 +257,50 @@ export function createEgeriaLayer(gl) {
           // random offset in a small disk around center
           const ang = rand(0, 2 * Math.PI);
           const r = rand(0.0, CLUMP.radius);
-          const base = [cx + r * Math.cos(ang), cz + r * Math.sin(ang)];
+          const bx = cx + r * Math.cos(ang);
+          const bz = cz + r * Math.sin(ang);
+
+          // respect tank shape + collisions
+          if (!isInsideTank(bx, bz, stemRadius)) continue;
+          if (checkCollision2D(bx, bz, stemRadius, 0.0)) continue;
 
           // Per-plant hue & height from noise
           const hue = rand(0.28, 0.36);
           const hn = fbm2(
-            (base[0] + seed * 1.7) * 0.9,
-            (base[1] - seed * 0.9) * 0.9,
+            (bx + seed * 1.7) * 0.9,
+            (bz - seed * 0.9) * 0.9,
             3
           );
           const heightScale = 0.7 + 0.6 * hn; // 0.70 .. 1.30
           const nodes = Math.max(6, Math.round(state.nodes * heightScale));
 
-          let y = 0.0,
-            twist = rand(0, 2 * Math.PI);
+          let y = 0.0;
+          let twist = rand(0, 2 * Math.PI);
           for (let i = 0; i < nodes; i++) {
             const seg =
               (0.1 + 0.02 * Math.max(0, 1.0 - i / nodes)) * heightScale;
-            pushStem(data, base, y, seg, hue);
+            pushStem(data, [bx, bz], y, seg, hue);
             y += seg;
 
             const leaves = Math.floor(rand(3, 5.999)); // 3–5 thin leaves per whorl
-            pushWhorl(data, base, y, leaves, twist, hue, 1.0);
+            pushWhorl(data, [bx, bz], y, leaves, twist, hue, 1.0);
             twist += 0.42;
 
             // Rare/short side shoots; a bit more common in taller (high-noise) plants
-            const bChance = state.branchChance * 0.5 * (0.5 + hn); // generally lower than before
+            const bChance = state.branchChance * 0.5 * (0.5 + hn);
             if (i > 2 && i < nodes - 2 && Math.random() < bChance) {
-              let y2 = y - rand(0.04, 0.1),
-                tw2 = twist + rand(-0.35, 0.35);
+              let y2 = y - rand(0.04, 0.1);
+              let tw2 = twist + rand(-0.35, 0.35);
               const sideN = Math.max(2, Math.floor(nodes * 0.25));
               for (let j = 0; j < sideN; j++) {
                 const d =
                   (0.08 + 0.015 * Math.max(0, 1 - j / sideN)) *
                   0.85 *
                   heightScale;
-                pushStem(data, base, y2, d, hue);
+                pushStem(data, [bx, bz], y2, d, hue);
                 y2 += d;
                 const kLeaves = Math.floor(rand(3, 4.999));
-                pushWhorl(data, base, y2, kLeaves, tw2, hue, 0.65);
+                pushWhorl(data, [bx, bz], y2, kLeaves, tw2, hue, 0.65);
                 tw2 += 0.4;
               }
             }
@@ -303,24 +311,34 @@ export function createEgeriaLayer(gl) {
       }
     }
 
-    // If we under-filled (super sparse threshold), sprinkle a few singles
+    // ----- FALLBACK SINGLES (for very sparse noise) ------------------------
     while (planted < state.stems) {
-      const x = rand(-TANK.xHalf, TANK.xHalf);
-      const z = rand(-TANK.zHalf, TANK.zHalf);
+      const bx = rand(-TANK.xHalf, TANK.xHalf);
+      const bz = rand(-TANK.zHalf, TANK.zHalf);
+
+      if (!isInsideTank(bx, bz, stemRadius)) continue;
+      if (checkCollision2D(bx, bz, stemRadius, 0.0)) continue;
+
       const hue = rand(0.28, 0.36);
-      const hn = fbm2((x + seed * 1.7) * 0.9, (z - seed * 0.9) * 0.9, 3);
+      const hn = fbm2(
+        (bx + seed * 1.7) * 0.9,
+        (bz - seed * 0.9) * 0.9,
+        3
+      );
       const heightScale = 0.7 + 0.6 * hn;
       const nodes = Math.max(6, Math.round(state.nodes * heightScale));
-      let y = 0.0,
-        twist = rand(0, 2 * Math.PI);
+
+      let y = 0.0;
+      let twist = rand(0, 2 * Math.PI);
       for (let i = 0; i < nodes; i++) {
         const seg = (0.1 + 0.02 * Math.max(0, 1.0 - i / nodes)) * heightScale;
-        pushStem(data, [x, z], y, seg, hue);
+        pushStem(data, [bx, bz], y, seg, hue);
         y += seg;
         const leaves = Math.floor(rand(3, 5.999));
-        pushWhorl(data, [x, z], y, leaves, twist, hue, 1.0);
+        pushWhorl(data, [bx, bz], y, leaves, twist, hue, 1.0);
         twist += 0.42;
       }
+
       planted++;
     }
 

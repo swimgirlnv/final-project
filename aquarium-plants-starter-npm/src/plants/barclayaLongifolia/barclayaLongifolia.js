@@ -1,5 +1,44 @@
 // plants/barclayaLongifolia.js
 import { vs, fs } from "./barclayaLongifoliaShaders.js";
+import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
+
+// ---- Noise + clump field ---------------------------------------------------
+const TANK = { xHalf: 1.6, zHalf: 1.2 }; // overall footprint used for clump cells
+const CLUMP = {
+  cell: 0.9,        // grid cell size → spacing between possible Barclaya clumps
+  radius: 0.35,     // how far rosettes spread from a clump center
+  noiseScale: 0.7,  // FBM frequency for clump presence
+  threshold: 0.55,  // higher = fewer clumps
+};
+
+function fract1(x) {
+  return x - Math.floor(x);
+}
+function hash2(i, j) {
+  return fract1(Math.sin(i * 127.1 + j * 311.7) * 43758.5453);
+}
+function noise2(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const a = hash2(ix,     iy);
+  const b = hash2(ix + 1, iy);
+  const c = hash2(ix,     iy + 1);
+  const d = hash2(ix + 1, iy + 1);
+  const u = fx * fx * (3 - 2 * fx);
+  const v = fy * fy * (3 - 2 * fy);
+  const ab = a * (1 - u) + b * u;
+  const cd = c * (1 - u) + d * u;
+  return ab * (1 - v) + cd * v; // 0..1
+}
+function fbm2(x, y, oct = 4) {
+  let f = 0.0, amp = 0.5, freq = 1.0;
+  for (let k = 0; k < oct; k++) {
+    f += amp * noise2(x * freq, y * freq);
+    amp *= 0.5;
+    freq *= 2.0;
+  }
+  return f; // ~0..1
+}
 
 // ---- Non-intersection + spatial hashing ------------------------------------
 const T_SAMPLES = [0.25, 0.45, 0.65, 0.85];
@@ -214,7 +253,11 @@ export function createBarclayaLayer(gl) {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.yawPitch);
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(d.yawPitch));
         gl.bindBuffer(gl.ARRAY_BUFFER, this.curveUndul);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(d.curveUndul));
+        gl.bufferSubData(
+          gl.ARRAY_BUFFER,
+          0,
+          new Float32Array(d.curveUndul)
+        );
         gl.bindBuffer(gl.ARRAY_BUFFER, this.hueVar);
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(d.hueVar));
         this.count = d.count;
@@ -255,12 +298,70 @@ export function createBarclayaLayer(gl) {
     minLeaves: 5,
     maxLeaves: 11, // per rosette
     undulFreq: 22.0, // edge ripple frequency
-    spread: { x: 1.55, z: 1.15 }, // tank footprint
+    spread: { x: 1.55, z: 1.15 }, // tank footprint (used only for fallback singles)
     redProb: 0.35, // chance a leaf is magenta-leaning
   };
 
   function rand(a, b) {
     return a + Math.random() * (b - a);
+  }
+
+  const MAX_TRIES = 28;
+  const PLANT_RADIUS = 0.18; // rosette footprint for tank / object collisions
+
+  // Helper to place one rosette at (cx, cz) with full collision checks
+  function placeRosetteAt(cx, cz, grid, d) {
+    const leaves = Math.floor(
+      rand(state.minLeaves, state.maxLeaves + 0.999)
+    );
+    const yawSeed = rand(0, Math.PI * 2);
+    const localAccepted = [];
+
+    for (let i = 0; i < leaves; i++) {
+      const len = rand(0.65, 1.35);
+      const wid = len * rand(0.12, 0.2); // half-width
+      const pitch = rand(0.45, 0.95);
+      const arch = rand(0.04, 0.11);
+      const undul = rand(0.01, 0.03);
+      const hueTweak = rand(-0.03, 0.03);
+      const redness =
+        Math.random() < state.redProb ? rand(0.55, 1.0) : rand(0.0, 0.35);
+
+      let placed = false;
+      let yawBase = yawSeed + (i / Math.max(1, leaves)) * (Math.PI * 2);
+
+      for (let tries = 0; tries < MAX_TRIES && !placed; tries++) {
+        const yaw = (yawBase + rand(-0.32, 0.32)) % (Math.PI * 2);
+        const cand = { yaw, len, wid, pitch, arch, undul, hueTweak, redness };
+
+        // bounding radius for spatial hash query
+        const rBound = rOnGround(len, pitch, 1.0) + wid * 2.0 + 0.04;
+        const neighbors = getNeighbors(grid, cx, cz, rBound);
+
+        if (
+          !collidesLocal(cand, localAccepted, cx, cz) &&
+          !collidesGlobal(cand, cx, cz, neighbors)
+        ) {
+          // Accept: write instance data
+          d.baseXZ.push(cx, cz);
+          d.lenWidth.push(len, wid);
+          d.yawPitch.push(yaw, pitch);
+          d.curveUndul.push(arch, undul);
+          d.hueVar.push(hueTweak, redness);
+          d.count++;
+
+          localAccepted.push(cand);
+          const rec = { cx, cz, yaw, len, wid, pitch, arch, undul };
+          addToGrid(grid, rec, rBound);
+          placed = true;
+        } else {
+          yawBase += rand(0.18, 0.42) * (Math.random() < 0.5 ? 1 : -1);
+        }
+      }
+      // if not placed after MAX_TRIES, we silently skip that leaf
+    }
+
+    return localAccepted.length > 0;
   }
 
   function regenerate() {
@@ -273,61 +374,63 @@ export function createBarclayaLayer(gl) {
       count: 0,
     };
 
-    const MAX_TRIES = 28;
-    const grid = new Map(); // spatial hash of accepted leaves (across ALL rosettes)
+    const grid = new Map();
+    const seed = Math.random() * 1000.0;
 
-    for (let p = 0; p < state.plants; p++) {
+    let plantsPlaced = 0;
+
+    // ---------- CLUMPED ROSETTES ------------------------------------------
+    const nx = Math.max(1, Math.floor((2 * TANK.xHalf) / CLUMP.cell));
+    const nz = Math.max(1, Math.floor((2 * TANK.zHalf) / CLUMP.cell));
+    const dx = (2 * TANK.xHalf) / nx;
+    const dz = (2 * TANK.zHalf) / nz;
+
+    for (let gx = 0; gx < nx && plantsPlaced < state.plants; gx++) {
+      for (let gz = 0; gz < nz && plantsPlaced < state.plants; gz++) {
+        const cxCell = -TANK.xHalf + (gx + 0.5) * dx;
+        const czCell = -TANK.zHalf + (gz + 0.5) * dz;
+
+        const n = fbm2(
+          (cxCell + seed) * CLUMP.noiseScale,
+          (czCell - seed) * CLUMP.noiseScale,
+          4
+        );
+        if (n < CLUMP.threshold) continue; // no clump here
+
+        const group = Math.min(
+          1 + Math.floor(rand(0, 3)), // 1–3 rosettes per clump
+          state.plants - plantsPlaced
+        );
+
+        for (let k = 0; k < group && plantsPlaced < state.plants; k++) {
+          const ang = rand(0, Math.PI * 2);
+          const r = rand(0.0, CLUMP.radius);
+          const cx = cxCell + r * Math.cos(ang);
+          const cz = czCell + r * Math.sin(ang);
+
+          if (!isInsideTank(cx, cz, PLANT_RADIUS)) continue;
+          if (checkCollision2D(cx, cz, PLANT_RADIUS, 0.0)) continue;
+
+          if (placeRosetteAt(cx, cz, grid, d)) {
+            plantsPlaced++;
+          }
+        }
+      }
+    }
+
+    // ---------- FALLBACK SINGLES (if noise too sparse) --------------------
+    const maxPlantAttempts = state.plants * 40;
+    let attempts = 0;
+    while (plantsPlaced < state.plants && attempts < maxPlantAttempts) {
+      attempts++;
       const cx = rand(-state.spread.x, state.spread.x);
       const cz = rand(-state.spread.z, state.spread.z);
 
-      const leaves = Math.floor(rand(state.minLeaves, state.maxLeaves + 0.999));
-      const yawSeed = rand(0, Math.PI * 2);
-      const localAccepted = []; // leaves within this rosette (for angular guard)
+      if (!isInsideTank(cx, cz, PLANT_RADIUS)) continue;
+      if (checkCollision2D(cx, cz, PLANT_RADIUS, 0.0)) continue;
 
-      for (let i = 0; i < leaves; i++) {
-        const len = rand(0.65, 1.35);
-        const wid = len * rand(0.12, 0.2); // half-width (matches VS)
-        const pitch = rand(0.45, 0.95);
-        const arch = rand(0.04, 0.11);
-        const undul = rand(0.01, 0.03);
-        const hueTweak = rand(-0.03, 0.03);
-        const redness =
-          Math.random() < state.redProb ? rand(0.55, 1.0) : rand(0.0, 0.35);
-
-        let placed = false;
-        let yawBase = yawSeed + (i / Math.max(1, leaves)) * (Math.PI * 2);
-
-        for (let tries = 0; tries < MAX_TRIES && !placed; tries++) {
-          const yaw = (yawBase + rand(-0.32, 0.32)) % (Math.PI * 2);
-          const cand = { yaw, len, wid, pitch, arch, undul, hueTweak, redness };
-
-          // bounding radius for spatial hash query
-          const rBound = rOnGround(len, pitch, 1.0) + wid * 2.0 + 0.04;
-
-          const neighbors = getNeighbors(grid, cx, cz, rBound);
-
-          if (
-            !collidesLocal(cand, localAccepted, cx, cz) &&
-            !collidesGlobal(cand, cx, cz, neighbors)
-          ) {
-            // Accept: write instance data
-            d.baseXZ.push(cx, cz);
-            d.lenWidth.push(len, wid);
-            d.yawPitch.push(yaw, pitch);
-            d.curveUndul.push(arch, undul);
-            d.hueVar.push(hueTweak, redness);
-            d.count++;
-
-            // Keep for future checks
-            localAccepted.push(cand);
-            const rec = { cx, cz, yaw, len, wid, pitch, arch, undul };
-            addToGrid(grid, rec, rBound);
-            placed = true;
-          } else {
-            yawBase += rand(0.18, 0.42) * (Math.random() < 0.5 ? 1 : -1);
-          }
-        }
-        // if not placed after MAX_TRIES, we skip the leaf to avoid intersections
+      if (placeRosetteAt(cx, cz, grid, d)) {
+        plantsPlaced++;
       }
     }
 
