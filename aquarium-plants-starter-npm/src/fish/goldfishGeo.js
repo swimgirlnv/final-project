@@ -267,7 +267,7 @@ export const eye_types = {
   CHEEKS: "CHEEKS",
   BUBBLY: "BUBBLY" 
 };
-function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}, eyeType, mouthTilt = 0.0) {
+function gfish_head(positions, indices, colors, labels, headPos, neckSize, headSize = {}, eyeType, mouthTilt = 0.0) {
   // ring, extrude while scaling down
   const numVertsRing = 8;
 
@@ -296,6 +296,7 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
     false,
     true
   );
+  assignLabel(labels, all_idx, 2);
 
   // Placing the eyes
   // define splines to sample points
@@ -441,8 +442,10 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
   }
 
   let eyeR_idx = positionEye(infoPacket.l);
+  assignLabel(labels, eyeR_idx, 3);
   all_idx.push(...eyeR_idx);
   let eyeL_idx = positionEye(infoPacket.r);
+  assignLabel(labels, eyeR_idx, 3);
   all_idx.push(...eyeL_idx);
   // Making the mouth
 
@@ -466,6 +469,7 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
     {x: 0.65, y: 0.2, z: 1.0},
     {x:0.0, y:-0.025, z:-0.01}
   );
+  assignLabel(labels, mouth_idx, 2);
   all_idx.push(...mouth_idx);
   
   rotate_around_point(positions, all_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 0.0, y: 180.0, z: 0.0});
@@ -804,8 +808,17 @@ function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinS
   return all_idx;
 }
 
+// make sure this is called after creating geometry, assumes everything is in order
+function assignLabel(labels, label_idx, labelVal)
+{
+  for (let i = 0; i <  label_idx.length; ++i) 
+  {
+    labels.push(labelVal);
+  }
+}
+
 export function goldfish(
-    positions, indices, colors,
+    positions, indices, colors, labels,
     // body params 
     bodyLength, bodyHeight, bodyWidth, arch,
     // head params
@@ -855,7 +868,7 @@ export function goldfish(
 
   let posCtrlPoints = [];
   let scaleCtrlPoints = [];
-  gfish_body(
+  let body_idx = gfish_body(
     positions, indices, colors, 
     bodyLength, bodyHeight, bodyWidth, arch,
     pectoralInfoPacket, pectoralShift, pectoralAngle,
@@ -865,19 +878,27 @@ export function goldfish(
     posCtrlPoints,
     scaleCtrlPoints
   );
+  assignLabel(labels, body_idx, 0);
 
-  gfish_pectoral(positions, indices, colors, pectoralInfoPacket.l, pectoralLength, pectoralWidth);
-  gfish_pectoral(positions, indices, colors, pectoralInfoPacket.r, pectoralLength, pectoralWidth);
+  let pectoral_idx = gfish_pectoral(positions, indices, colors, pectoralInfoPacket.l, pectoralLength, pectoralWidth);
+  pectoral_idx.push(...gfish_pectoral(positions, indices, colors, pectoralInfoPacket.r, pectoralLength, pectoralWidth));
+  assignLabel(labels, pectoral_idx, 1);
 
-  gfish_pelvic(positions, indices, colors, pelvicInfoPacket.l, pelvicLength, pelvicWidth, true);
-  gfish_pelvic(positions, indices, colors, pelvicInfoPacket.r, pelvicLength, pelvicWidth, false);
+  let pelvic_idx = gfish_pelvic(positions, indices, colors, pelvicInfoPacket.l, pelvicLength, pelvicWidth, true);
+  pelvic_idx.push(...gfish_pelvic(positions, indices, colors, pelvicInfoPacket.r, pelvicLength, pelvicWidth, false));
+  assignLabel(labels, pelvic_idx, 1);
 
   headSize.x *= 0.1;
   headSize.y *= 0.2;
-  gfish_head(positions, indices, colors, head_pos, head_body_size, headSize, eye_types.BUBBLY, mouthTilt);
-  gfish_caudal(positions, indices, colors, caudal_pos, caudalLength, caudalWidth, bodyLength, caudal_types.VBUTT); 
-  gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalShift, posCtrlPoints, scaleCtrlPoints, dorsalType);
-  gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType);
+  // assigns labels to eyes/head within the function
+  gfish_head(positions, indices, colors, labels, head_pos, head_body_size, headSize, eye_types.BUBBLY, mouthTilt);
+  
+  let caudal_idx = gfish_caudal(positions, indices, colors, caudal_pos, caudalLength, caudalWidth, bodyLength, caudal_types.VBUTT); 
+  assignLabel(labels, caudal_idx, 1);
+  let dorsal_idx = gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalShift, posCtrlPoints, scaleCtrlPoints, dorsalType);
+  assignLabel(labels, dorsal_idx, 1);
+  let afin_idx = gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType);
+  assignLabel(labels, afin_idx, 1);
 
   return;
 }

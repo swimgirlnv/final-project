@@ -4,6 +4,7 @@ precision highp float;
 // attributes
 in vec3 vs_Pos;
 in vec3 vs_Col;
+in int vs_Label;
 
 // Uniforms
 uniform mat4 u_proj;
@@ -16,6 +17,7 @@ uniform vec2  u_res;         // viewport size
 out vec3 v_pos;
 out vec3 v_color;
 out float v_camDist;
+flat out int v_label;
 
 float hash11(float n){ return fract(sin(n)*43758.5453123); }
 
@@ -45,6 +47,7 @@ void main() {
   // Project
   v_pos = vs_Pos;
   gl_Position = world;
+  v_label = vs_Label;
 }`;
 
 export const fs = `#version 300 es
@@ -53,6 +56,7 @@ precision highp float;
 in vec3 v_pos;
 in vec3 v_color;
 in float v_camDist;
+flat in int v_label;
 out vec4 outColor;
 
 uniform float u_time;
@@ -174,16 +178,31 @@ vec3 palette( in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d )
 }
 
 void main() {
-  vec3 scaledPos = vec3(v_pos.x + 1.2, v_pos.y + 1.3, v_pos.z * 2.0);
-  float fishScale = fish_scale(scaledPos * 20.0);
-  float noisy = smoothstep(0.2, 0.6, fbm(v_pos * 10.0));
-
-  float noisyFishScale = mix(fishScale, 1.0 - fishScale, noisy);
-
-  vec3 newCol = vec3(noisyFishScale);
+  vec3 newCol = vec3(1.0);
 
   float fog = smoothstep(u_fogNear, u_fogFar, v_camDist); // 0 near -> 1 far
   vec3 col = mix(newCol, u_fogColor, fog);
-  outColor = vec4(col, 1.0);
+  //outColor = vec4(col, 1.0);
+  if (v_label == 0) 
+  {
+    vec3 scaledPos = vec3(v_pos.x + 1.2, v_pos.y + 1.3, v_pos.z * 2.0);
+    float fishScale = fish_scale(scaledPos * 10.0);
+    float noisy = smoothstep(0.2, 0.6, fbm(v_pos * 10.0));
+
+    float noisyFishScale = mix(fishScale, 1.0 - fishScale, noisy);
+    outColor = vec4(vec3(noisyFishScale), 1.0);
+  }
+  else if (v_label == 1) 
+  {
+    outColor = vec4(1.0, 0.0, 0.0, 1.0);
+  }
+  else if (v_label == 2)
+  {
+    outColor = vec4(0.0, 1.0, 0.0, 1.0);
+  }
+  else 
+  {
+    outColor = vec4(1.0, 0.0, 1.0, 1.0);
+  }
 }
 `;

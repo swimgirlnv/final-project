@@ -31,9 +31,10 @@ function createFishGeometry(gl) {
   const positions = [];
   const indices = [];
   const colors = [];
+  const labels = [];
 
   goldfish(
-    positions, indices, colors,
+    positions, indices, colors, labels,
     // body params
     // bodyLength, bodyHeight, bodyWidth, belly_size, arch
     1.35, 0.6, 0.7, 0.0,
@@ -63,10 +64,12 @@ function createFishGeometry(gl) {
   // Attribute locations (hard-coded to match shader order)
   const vs_Pos_loc = 0;
   const vs_Col_loc = 1;
+  const vs_Label_loc = 2;
 
   // Create VBOs and IBO
   const posBuffer = gl.createBuffer();
   const colorBuffer = gl.createBuffer();
+  const labelBuffer = gl.createBuffer();
   const ibo = gl.createBuffer();
   
   // Helper to setup/bind buffers initially
@@ -80,6 +83,11 @@ function createFishGeometry(gl) {
   gl.bindVertexArray(vao);
   setupBuffer(posBuffer, positions, vs_Pos_loc, 3);
   setupBuffer(colorBuffer, colors, vs_Col_loc, 3);
+  
+  gl.bindBuffer(gl.ARRAY_BUFFER, labelBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Int32Array(labels), gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(vs_Label_loc);
+  gl.vertexAttribIPointer(vs_Label_loc, 1, gl.INT, 0, 0);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
   gl.bufferData(
@@ -92,6 +100,7 @@ function createFishGeometry(gl) {
     vao,
     posBuffer,
     colorBuffer,
+    labelBuffer,
     ibo,
     count: indices.length,
     attribs: { vs_Pos : vs_Pos_loc, vs_Col : vs_Col_loc },
@@ -144,12 +153,13 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     const positions = [];
     const indices = [];
     const colors = [];
+    const labels = [];
 
     console.log(newParams);
 
     // 1. Call the geometry generation function with the new parameters
     goldfish(
-        positions, indices, colors,
+        positions, indices, colors, labels,
         newParams.bodyLength, newParams.bodyHeight, newParams.bodyWidth, newParams.arch,
         newParams.headSize, eye_types.GOOGLY, newParams.mouthTilt,
         newParams.caudalLength, newParams.caudalWidth, caudal_types.DROOPY,
@@ -171,6 +181,9 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     gl.bindBuffer(gl.ARRAY_BUFFER, gfish.colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.DYNAMIC_DRAW);
 
+    gl.bindBuffer(gl.ARRAY_BUFFER, gfish.labelBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Int32Array(labels), gl.DYNAMIC_DRAW);
+
     // Update Indices IBO
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gfish.ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.DYNAMIC_DRAW);
@@ -190,7 +203,8 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
 export function createGoldfish(gl) {
     const bindings = {
       vs_Pos: 0,
-      vs_Col: 1
+      vs_Col: 1,
+      vs_Label: 2
     };
 
     const prog = makeProgram(gl, vs, fs, bindings);
