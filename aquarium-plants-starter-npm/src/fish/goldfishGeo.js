@@ -25,7 +25,7 @@ import {
     apply_matrix_transform,
     vec3
 } from "./linearTools.js";
-import { CatmullRomSpline3D } from "./splineVec3.js";
+import { CatmullRomSpline3D } from "./SplineVec3.js";
 
 // ---------- GOLDFISH BODY PART GENERATORS. PASS POS/IDX ARRAYS BY REFERENCE FOR UPDATE
 function gfish_body(positions, indices, colors, bodyLength, height, width, arch, 
