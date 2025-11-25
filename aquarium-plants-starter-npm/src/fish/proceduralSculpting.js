@@ -1,4 +1,4 @@
-import { CatmullRomSpline3D } from "./splineVec3.js";
+import { CatmullRomSpline3D } from "./SplineVec3.js";
 import { addVec, scaleVec } from "./linearTools.js";
 
 export function bend(positions, idx_list, amount, origin, maxLength, scaleAxis = 0, applicationAxis = 0) {
