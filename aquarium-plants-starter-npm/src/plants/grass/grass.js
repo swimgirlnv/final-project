@@ -1,4 +1,8 @@
 import { vs, fs } from "./grassShaders";
+import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
+import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
+
+const TANK = { xHalf: TANK_X_HALF, zHalf: TANK_Z_HALF }; // world half-extents in X/Z
 
 export function createGrassLayer(gl) {
   function compile(type, src) {
@@ -25,7 +29,42 @@ export function createGrassLayer(gl) {
     return p;
   }
 
+  // ---------------------------------------------------------------------------
+  // Noise helpers
+  // ---------------------------------------------------------------------------
+
+  function fract(v) {
+    return v - Math.floor(v);
+  }
+
+  function hash2D(x, y) {
+    return fract(Math.sin(x * 127.1 + y * 311.7) * 43758.5453123);
+  }
+
+  // simple value noise in [0,1]
+  function valueNoise2D(px, pz) {
+    const ix = Math.floor(px);
+    const iz = Math.floor(pz);
+    const fx = px - ix;
+    const fz = pz - iz;
+
+    const a = hash2D(ix, iz);
+    const b = hash2D(ix + 1, iz);
+    const c = hash2D(ix, iz + 1);
+    const d = hash2D(ix + 1, iz + 1);
+
+    const ux = fx * fx * (3 - 2 * fx);
+    const uz = fz * fz * (3 - 2 * fz);
+
+    const ab = a + (b - a) * ux;
+    const cd = c + (d - c) * ux;
+    return ab + (cd - ab) * uz; // 0..1
+  }
+
+  // ---------------------------------------------------------------------------
   // ribbon geometry
+  // ---------------------------------------------------------------------------
+
   function makeRibbon(segments = 28) {
     const pos = [],
       a_t = [],
@@ -83,7 +122,7 @@ export function createGrassLayer(gl) {
       phase: mk(5, 1),
       amp: mk(6, 1),
       hue: mk(7, 1),
-      yaw: mk(8,1),
+      yaw: mk(8, 1),
       count: 0,
       update(data) {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.base);
@@ -96,7 +135,8 @@ export function createGrassLayer(gl) {
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.amp));
         gl.bindBuffer(gl.ARRAY_BUFFER, this.hue);
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.hue));
-        gl.bindBuffer(gl.ARRAY_BUFFER,this.yaw);    gl.bufferSubData(gl.ARRAY_BUFFER,0,new Float32Array(data.yaw)); // NEW
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.yaw);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.yaw));
         this.count = data.count;
       },
     };
@@ -130,7 +170,7 @@ export function createGrassLayer(gl) {
   const u_fogFar = U("u_fogFar");
 
   const state = {
-    count: +document.getElementById("plantCount")?.value || 200,
+    count: +document.getElementById("plantCount")?.value || 600,
     avgH: 1.0,
     flex: 1.4,
   };
@@ -138,21 +178,69 @@ export function createGrassLayer(gl) {
   function rand(a, b) {
     return a + Math.random() * (b - a);
   }
+
+  // ---------------------------------------------------------------------------
+  // Scatter with clumped density based on noise
+  // ---------------------------------------------------------------------------
   function scatter() {
-    const d = { base: [], height: [], phase: [], amp: [], hue: [], yaw: [], count: 0 };
-    for (let i = 0; i < state.count; i++) {
-      const x = rand(-1.35, 1.35),
-        z = rand(-0.62, 0.62);
+    const d = {
+      base: [],
+      height: [],
+      phase: [],
+      amp: [],
+      hue: [],
+      yaw: [],
+      count: 0,
+    };
+    const grassRadius = 0.015;
+
+    let attempts = 0;
+    const maxAttempts = state.count * 40;
+
+    // noise → density controls
+    const FREQ = 0.6; // lower = bigger clumps, higher = smaller/patchier
+    const BASE_DENSITY = 0.3; // minimum chance to place grass everywhere
+    const CLUMP_STRENGTH = 0.55; // how much noise boosts density (0..1)
+
+    while (d.count < state.count && attempts < maxAttempts) {
+      attempts++;
+
+      // sample uniformly over full floor bounds
+      const x = (Math.random() * 2 - 1) * TANK_X_HALF;
+      const z = (Math.random() * 2 - 1) * TANK_Z_HALF;
+
+      // let plants get much closer to the walls:
+      // use tiny padding (or comment this out if you want *all* the way to the edge)
+      if (!isInsideTank(x, z, 0.001)) continue;
+
+      // still avoid big objects / holes
+      if (checkCollision2D(x, z, grassRadius, 0.0)) continue;
+
+      // noise in [0,1]
+      const n = valueNoise2D(x * FREQ, z * FREQ);
+
+      // probability of placing grass here
+      const p = BASE_DENSITY + CLUMP_STRENGTH * (n * n);
+      if (Math.random() > p) continue;
+
+      // place a blade
       d.base.push(x, z);
-      d.height.push(rand(0.6 * state.avgH, 1.5 * state.avgH));
+
+      const hBase = rand(0.6 * state.avgH, 1.5 * state.avgH);
+      const heightBoost = 0.35 * (n - 0.5);
+      d.height.push(Math.max(0.3, hBase + heightBoost));
+
       d.phase.push(Math.random() * Math.PI * 2);
       d.amp.push(rand(0.05, 0.2));
       d.hue.push(rand(0.26, 0.34));
-      d.yaw.push(rand(0, Math.PI*2));
+      d.yaw.push(rand(0, Math.PI * 2));
+
       d.count++;
     }
+
     inst.update(d);
   }
+
   scatter();
 
   return {

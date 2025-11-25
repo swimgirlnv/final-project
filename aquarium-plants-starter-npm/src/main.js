@@ -1,7 +1,13 @@
 // src/main.js
-import { createEgeriaLayer } from "./plants/egeriaDensa.js";
-import { createGrassLayer } from "./plants/grass.js";
-import { createFloorLayer } from "./tank/tankFloor.js";
+import { createEgeriaLayer } from "./plants/egeriaDensa/egeriaDensa.js";
+import { createGrassLayer } from "./plants/grass/grass.js";
+import { createFloorLayer, setTankSize } from "./tank/tankFloor.js";
+import { createBarclayaLayer } from "./plants/barclayaLongifolia/barclayaLongifolia.js";
+import { createDriftwoodLayer } from "./decorations/driftwood/driftwood.js";
+import { createBoulderLayer } from "./decorations/boulder/boulder.js";
+import { createFishHouseLayer } from "./decorations/fishHouse/fishHouse.js";
+import { resetCollisionState, updateTankBounds } from "./sceneCollision.js";
+import { createGoldfish, regenerateGoldfishGeometry } from "./fish/goldfish.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -83,15 +89,20 @@ function lookAt(eye, center, up) {
 }
 
 /* ---------- DOM ---------- */
-const canvas = document.getElementById("gl"); // ⬅️ declare before using it
+const canvas = document.getElementById("gl");
 const fpsEl = document.getElementById("fps");
 const showGrass = document.getElementById("showGrass");
 const showEgeria = document.getElementById("showEgeria");
+const showBarclaya = document.getElementById("showBarclaya");
+const showWood = document.getElementById("showWood");
+const showBoulders = document.getElementById("showBoulders");
+const showFishHouse = document.getElementById("showFishHouse");
+
 const currentStrength = 0;
 const currentAngle = -3.14;
 
 // grass controls
-const plantCount = document.getElementById("plantCount");
+const plantCount = document.getElementById("plantCount"); // not actually plant count, changes everything put in main settings
 const plantCountLabel = document.getElementById("plantCountLabel");
 const flex = document.getElementById("flex");
 const heightAvg = document.getElementById("height");
@@ -104,6 +115,146 @@ const egBranch = document.getElementById("egeriaBranch");
 
 const scatterBtn = document.getElementById("scatter");
 const regenBtn = document.getElementById("regenerate");
+
+// wood controls
+const woodPieces = document.getElementById("woodPieces");
+const woodBranches = document.getElementById("woodBranches");
+const woodGnarl = document.getElementById("woodGnarl");
+const woodTwist = document.getElementById("woodTwist");
+const woodDetail = document.getElementById("woodDetail");
+const woodGrain = document.getElementById("woodGrain");
+const woodGrainMix = document.getElementById("woodGrainMix");
+const woodWarm = document.getElementById("woodWarm");
+
+// boulder controls
+const boulderCount = document.getElementById("boulderCount");
+const boulderCountLabel = document.getElementById("boulderCountLabel");
+const boulderRegenerate = document.getElementById("boulderRegenerate");
+
+// tank floor controls
+const floorGravelMix = document.getElementById("floorGravelMix");
+const floorAmp = document.getElementById("floorAmp");
+const floorGravelScale = document.getElementById("floorGravelScale");
+const floorGravelBump = document.getElementById("floorGravelBump");
+const palSand = document.getElementById("floorPalSand");
+const palGrey = document.getElementById("floorPalGrey");
+const palRainbow = document.getElementById("floorPalRainbow");
+const tankSize = document.getElementById("tankSize");
+
+// goldfish controls
+const bodyLength = document.getElementById("bodyLength");
+const bodyHeight = document.getElementById("bodyHeight");
+const bodyWidth = document.getElementById("bodyWidth");
+const arch = document.getElementById("arch");
+const headSize = document.getElementById("headSize");
+const mouthTilt = document.getElementById("mouthTilt");
+const caudalLength = document.getElementById("caudalLength");
+const caudalWidth = document.getElementById("caudalWidth");
+const dorsalLength = document.getElementById("dorsalLength");
+const dorsalWidth = document.getElementById("dorsalWidth");
+const dorsalShift = document.getElementById("dorsalShift");
+const pelvicLength = document.getElementById("pelvicLength");
+const pelvicWidth = document.getElementById("pelvicWidth");
+const pelvicShift = document.getElementById("pelvicShift");
+const pelvicAngle = document.getElementById("pelvicAngle");
+const pectoralLength = document.getElementById("pectoralLength");
+const pectoralWidth = document.getElementById("pectoralWidth");
+const pectoralShift = document.getElementById("pectoralShift");
+const pectoralAngle = document.getElementById("pectoralAngle");
+const afinLength = document.getElementById("afinLength");
+const afinWidth = document.getElementById("afinWidth");
+const afinShift = document.getElementById("afinShift");
+
+// Function to read the currently checked value from a radio group
+const getRadioValue = (group) => {
+    for (const radio of group) {
+        if (radio.checked) {
+            return radio.value;
+        }
+    }
+    // Return a default or the first value if nothing is checked (safer for initialization)
+    return group[0] ? group[0].value : null; 
+};
+
+function readGoldfishParams() {
+    return {
+        // body params (float values from sliders)
+        bodyLength: parseFloat(bodyLength.value),
+        bodyHeight: parseFloat(bodyHeight.value),
+        bodyWidth: parseFloat(bodyWidth.value),
+        arch: parseFloat(arch.value),
+
+        // head params
+        headSize: { x: parseFloat(headSize.value), y: parseFloat(headSize.value), z: parseFloat(headSize.value) }, // Assuming headSize slider affects both X and Y equally for now
+        mouthTilt: parseFloat(mouthTilt.value),
+        
+        // caudal params
+        caudalLength: parseFloat(caudalLength.value),
+        caudalWidth: parseFloat(caudalWidth.value),
+        
+        // dorsal params
+        dorsalLength: parseFloat(dorsalLength.value),
+        dorsalWidth: parseFloat(dorsalWidth.value),
+        dorsalShift: parseFloat(dorsalShift.value),
+        
+        // pelvic params
+        pelvicLength: parseFloat(pelvicLength.value),
+        pelvicWidth: parseFloat(pelvicWidth.value),
+        pelvicShift: parseFloat(pelvicShift.value),
+        pelvicAngle: parseFloat(pelvicAngle.value),
+        
+        // pectoral params
+        pectoralLength: parseFloat(pectoralLength.value),
+        pectoralWidth: parseFloat(pectoralWidth.value),
+        pectoralShift: parseFloat(pectoralShift.value),
+        pectoralAngle: parseFloat(pectoralAngle.value),
+        
+        // afin params
+        afinLength: parseFloat(afinLength.value),
+        afinWidth: parseFloat(afinWidth.value),
+        afinShift: parseFloat(afinShift.value)
+    };
+}
+
+function regenerateGoldfish() {
+    const params = readGoldfishParams();
+    regenerateGoldfishGeometry(gl, gfish.geometry, params);
+}
+
+/**
+ * Wires up all goldfish UI elements to the regeneration function.
+ */
+function initGoldfishUI() {
+    // 1. Sliders (Input event fires continuously while dragging)
+    const sliders = [
+        bodyLength, bodyHeight, bodyWidth, arch,
+        headSize, mouthTilt,
+        caudalLength, caudalWidth,
+        dorsalLength, dorsalWidth, dorsalShift,
+        pelvicLength, pelvicWidth, pelvicShift, pelvicAngle,
+        pectoralLength, pectoralWidth, pectoralShift, pectoralAngle,
+        afinLength, afinWidth, afinShift
+    ];
+    sliders.forEach(slider => {
+        if (slider) {
+            slider.addEventListener("input", regenerateGoldfish);
+        }
+    });
+
+    // 2. Radio buttons (Change event fires when a new one is selected)
+    /*const radioGroups = [eyeTypeGroup, caudalTypeGroup, dorsalTypeGroup, afinTypeGroup];
+    radioGroups.forEach(group => {
+        // group is a NodeList/HTMLCollection, we need to iterate over its elements
+        Array.from(group).forEach(radio => {
+            if (radio) {
+                radio.addEventListener("change", regenerateGoldfish);
+            }
+        });
+    });*/
+}
+
+// Initialize the goldfish UI handlers immediately
+initGoldfishUI();
 
 /* ---------- Orbit camera ---------- */
 const cam = {
@@ -175,11 +326,20 @@ document.getElementById("resetCam")?.addEventListener("click", () => {
 /* ---------- GL + layers ---------- */
 const gl = createGL(canvas);
 gl.enable(gl.DEPTH_TEST);
+gl.cullFace(gl.BACK);
 gl.clearColor(0.02, 0.07, 0.13, 1);
 
 const floor = createFloorLayer(gl);
-const grass = createGrassLayer(gl);
+floor.setFloorFog(0.55, 0.12);
+
+// Create layers in collision order: large decorations first, then plants
+const driftwood = createDriftwoodLayer(gl);
+const fishHouse = createFishHouseLayer(gl);
+const boulders = createBoulderLayer(gl);
 const egeria = createEgeriaLayer(gl);
+const barclaya = createBarclayaLayer(gl);
+const grass = createGrassLayer(gl);
+const gfish = createGoldfish(gl);
 
 const FOG = { color: [0.02, 0.07, 0.13], near: 2.0, far: 5.5 };
 floor.setFog(FOG.color, FOG.near, FOG.far);
@@ -195,19 +355,34 @@ if (plantCount)
   plantCount.addEventListener("input", () => {
     grass.setCount(+plantCount.value);
     updateCountLabel();
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
     grass.regenerate();
   });
 if (flex) flex.addEventListener("input", () => grass.setFlex(+flex.value));
 if (heightAvg)
   heightAvg.addEventListener("input", () => {
     grass.setAvgHeight(+heightAvg.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
     grass.regenerate();
   });
 
 if (egCount)
   egCount.addEventListener("input", () => {
     egeria.setCount(+egCount.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
 if (egWidth)
   egWidth.addEventListener("input", () =>
@@ -216,24 +391,154 @@ if (egWidth)
 if (egNodes)
   egNodes.addEventListener("input", () => {
     egeria.setNodes(+egNodes.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
 if (egBranch)
   egBranch.addEventListener("input", () => {
     egeria.setBranchChance(+egBranch.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
 
 if (scatterBtn)
   scatterBtn.addEventListener("click", () => {
-    grass.regenerate();
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
 if (regenBtn)
   regenBtn.addEventListener("click", () => {
-    grass.regenerate();
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
     egeria.regenerate();
+    grass.regenerate();
   });
+
+woodPieces?.addEventListener("input", () => {
+  driftwood.setPieces(+woodPieces.value);
+  resetCollisionState();
+  driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
+woodBranches?.addEventListener("input", () => {
+  driftwood.setBranches(+woodBranches.value);
+  resetCollisionState();
+  driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
+woodGnarl?.addEventListener("input", () => {
+  driftwood.setGnarl(+woodGnarl.value);
+  resetCollisionState();
+  driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
+woodTwist?.addEventListener("input", () => {
+  driftwood.setTwist(+woodTwist.value);
+  resetCollisionState();
+  driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
+woodDetail?.addEventListener("input", () => {
+  driftwood.setDetail(+woodDetail.value);
+  resetCollisionState();
+  driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
+woodGrain?.addEventListener("input", () =>
+  driftwood.setGrainFreq(+woodGrain.value)
+);
+woodGrainMix?.addEventListener("input", () =>
+  driftwood.setGrainMix(+woodGrainMix.value)
+);
+woodWarm?.addEventListener("input", () => driftwood.setWarm(+woodWarm.value));
+
+if (boulderCountLabel && boulderCount)
+  boulderCountLabel.textContent = String(boulderCount.value);
+if (boulderCount)
+  boulderCount.addEventListener("input", () => {
+    boulderCountLabel.textContent = String(boulderCount.value);
+    boulders.setCount(+boulderCount.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
+    grass.regenerate();
+  });
+if (boulderRegenerate) boulderRegenerate.addEventListener("click", () => {
+  resetCollisionState();
+  driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
+
+floorGravelMix?.addEventListener("input", () =>
+  floor.setGravelMix(+floorGravelMix.value)
+);
+floorAmp?.addEventListener("input", () => floor.setAmp(+floorAmp.value));
+floorGravelScale?.addEventListener("input", () =>
+  floor.setGravelScale(+floorGravelScale.value)
+);
+floorGravelBump?.addEventListener("input", () =>
+  floor.setGravelBump(+floorGravelBump.value)
+);
+
+palSand?.addEventListener(
+  "change",
+  () => palSand.checked && floor.setPalette("sand")
+);
+palGrey?.addEventListener(
+  "change",
+  () => palGrey.checked && floor.setPalette("grey")
+);
+palRainbow?.addEventListener(
+  "change",
+  () => palRainbow.checked && floor.setPalette("rainbow")
+);
+
+tankSize?.addEventListener("input", () => {
+  setTankSize(+tankSize.value);
+  floor.regenerate();
+  updateTankBounds();
+  resetCollisionState();
+  driftwood.regenerate();
+  boulders.regenerate();
+  fishHouse.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
 
 /* ---------- Render loop ---------- */
 let last = performance.now(),
@@ -277,23 +582,42 @@ let last = performance.now(),
   FOG.far = 2.0 + 1.9 * cam.r;
 
   // Current direction from UI
-  const ang = parseFloat(currentAngle?.value ?? "0"); // <-- define angle
+  const ang =
+    typeof currentAngle === "number"
+      ? currentAngle
+      : parseFloat(currentAngle?.value ?? "0");
+  const strength =
+    typeof currentStrength === "number"
+      ? currentStrength
+      : parseFloat(currentStrength?.value ?? "0.6");
   const dir = [Math.cos(ang), Math.sin(ang)];
+
+  const fp = floor.getParams
+    ? floor.getParams()
+    : { amp: 0.18, scale: 0.9, yOffset: -0.03 };
 
   const shared = {
     proj,
     view,
     time: t,
-    currentStrength: parseFloat(currentStrength?.value ?? "0.6"),
+    currentStrength: strength,
     currentDir: dir,
     res: [canvas.width, canvas.height],
     fogColor: FOG.color,
     fogNear: FOG.near,
     fogFar: FOG.far,
+    floorAmp: fp.amp,
+    floorScale: fp.scale,
+    floorYOffset: fp.yOffset,
   };
 
   // draw
   floor.draw(shared);
+  if (showWood?.checked !== false) driftwood.draw(shared);
+  if (showBoulders?.checked !== false) boulders.draw(shared);
+  if (showFishHouse?.checked !== false) fishHouse.draw(shared);
   if (showGrass?.checked !== false) grass.draw(shared);
   if (showEgeria?.checked !== false) egeria.draw(shared);
+  if (showBarclaya?.checked !== false) barclaya.draw(shared);
+  gfish.draw(shared);
 })();

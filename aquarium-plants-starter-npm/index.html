@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Virtual Aquarium — Plants Starter (WebGL2)</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐠</text></svg>">
     <style>
       html,
       body {
@@ -12,134 +13,436 @@
         background: #051424;
         color: #d9f1ff;
         font-family: system-ui, sans-serif;
+        overflow: hidden;
       }
       #wrap {
-        display: grid;
-        grid-template-columns: 1fr 320px;
+        display: flex;
         height: 100%;
+        position: relative;
       }
       canvas {
         display: block;
         width: 100%;
         height: 100%;
       }
-      aside {
-        padding: 12px 16px;
-        border-left: 1px solid rgba(255, 255, 255, 0.1);
-        background: #0a233b;
+      
+      /* Icon sidebar */
+      #iconSidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 60px;
+        background: #0a1f35;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 12px 0;
+        gap: 8px;
+        z-index: 100;
       }
+      
+      .icon-btn {
+        width: 44px;
+        height: 44px;
+        background: #103657;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        transition: all 0.2s;
+        position: relative;
+      }
+      
+      .icon-btn:hover {
+        background: #1a4a70;
+        transform: translateX(2px);
+      }
+      
+      .icon-btn.active {
+        background: #2a5a80;
+        border-color: rgba(255, 255, 255, 0.3);
+        box-shadow: 0 0 8px rgba(100, 200, 255, 0.3);
+      }
+      
+      .icon-btn:active {
+        transform: translateX(1px) scale(0.95);
+      }
+      
+      /* Expandable panel */
+      #controlPanel {
+        position: fixed;
+        left: 60px;
+        top: 0;
+        height: 100%;
+        width: 300px;
+        background: #0a233b;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        overflow-y: auto;
+        z-index: 99;
+        padding: 16px;
+        box-shadow: 4px 0 12px rgba(0, 0, 0, 0.3);
+      }
+      
+      #controlPanel.open {
+        transform: translateX(0);
+      }
+      
+      .control-section {
+        display: none;
+      }
+      
+      .control-section.active {
+        display: block;
+      }
+      
       h1 {
         font-size: 16px;
-        margin: 0 0 8px;
+        margin: 0 0 12px;
       }
+      
+      h2 {
+        font-size: 14px;
+        margin: 16px 0 8px;
+        opacity: 0.9;
+      }
+      
       .stat {
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 12px;
+        margin-bottom: 12px;
       }
+      
       label {
         display: block;
         margin: 10px 0 4px;
         font-size: 12px;
         opacity: 0.9;
       }
+      
       input[type="range"] {
         width: 100%;
       }
-      small {
-        opacity: 0.8;
+      
+      input[type="checkbox"] {
+        margin-right: 6px;
       }
-      .tip {
-        margin-top: 10px;
-        font-size: 12px;
-        opacity: 0.8;
-        line-height: 1.4;
-      }
+      
       .btn {
         margin-top: 10px;
-        padding: 6px 10px;
+        padding: 8px 12px;
         background: #103657;
         color: #d9f1ff;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 8px;
         cursor: pointer;
+        width: 100%;
+        font-size: 12px;
+        transition: background 0.2s;
       }
+      
+      .btn:hover {
+        background: #1a4a70;
+      }
+      
       .btn:active {
         transform: translateY(1px);
       }
-      a {
-        color: #bfe4ff;
+      
+      hr {
+        opacity: 0.15;
+        margin: 16px 0;
+      }
+      
+      /* Scrollbar styling */
+      #controlPanel::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      #controlPanel::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+      }
+      
+      #controlPanel::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+      }
+      
+      #controlPanel::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
       }
     </style>
   </head>
   <body>
     <div id="wrap">
       <canvas id="gl"></canvas>
-      <aside>
-        <button class="btn" id="resetCam">Reset camera</button>
-        <h1>Plants Controls</h1>
-        <div class="stat">FPS: <span id="fps">–</span></div>
-        <label>Plant count: <span id="plantCountLabel"></span></label>
-        <input id="plantCount" type="range" min="10" max="600" value="200" />
+      
+      <!-- Icon Sidebar -->
+      <div id="iconSidebar">
+        <div class="icon-btn" data-section="general" title="General">⚙️</div>
+        <div class="icon-btn" data-section="fish" title="Goldfish">🐠</div>
+        <div class="icon-btn" data-section="grass" title="Grass">🌿</div>
+        <div class="icon-btn" data-section="egeria" title="Egeria">🪴</div>
+        <div class="icon-btn" data-section="barclaya" title="Barclaya">🍃</div>
+        <div class="icon-btn" data-section="driftwood" title="Driftwood">🪵</div>
+        <div class="icon-btn" data-section="boulders" title="Boulders">🪨</div>
+        <div class="icon-btn" data-section="fishhouse" title="Fish House">🍍</div>
+        <div class="icon-btn" data-section="floor" title="Tank Floor">⬛</div>
+      </div>
+      
+      <!-- Control Panel -->
+      <div id="controlPanel">
+        <!-- General Controls -->
+        <div class="control-section" id="section-general">
+          <h1>General Controls</h1>
+          <button class="btn" id="resetCam">Reset Camera</button>
+          <div class="stat">FPS: <span id="fps">–</span></div>
+          
+          <h2>Visibility</h2>
+          <label><input id="showGrass" type="checkbox" checked /> Show grass</label>
+          <label><input id="showEgeria" type="checkbox" checked /> Show egeria</label>
+          <label><input id="showBarclaya" type="checkbox" checked /> Show barclaya</label>
+          <label><input id="showWood" type="checkbox" checked /> Show driftwood</label>
+          <label><input id="showBoulders" type="checkbox" checked /> Show boulders</label>
+          <label><input id="showFishHouse" type="checkbox" checked /> Show fish house</label>
+          
+          <button class="btn" id="regenerate">Regenerate All</button>
 
-        <label
-          ><input id="showGrass" type="checkbox" checked /> Show grass</label
-        >
-        <label
-          ><input id="showEgeria" type="checkbox" checked /> Show egeria</label
-        >
-
-        <hr style="opacity: 0.15" />
-
-        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
-          Egeria densa
-        </h2>
-        <label>Stems</label>
-        <input id="egeriaCount" type="range" min="20" max="400" value="120" />
-        <label>Leaf width (scale)</label>
-        <input
-          id="egeriaLeafWidth"
-          type="range"
-          min="0.6"
-          max="2.0"
-          step="0.01"
-          value="1.00"
-        />
-        <label>Stem nodes</label>
-        <input id="egeriaNodes" type="range" min="8" max="20" value="12" />
-        <label>Branch chance</label>
-        <input
-          id="egeriaBranch"
-          type="range"
-          min="0"
-          max="0.25"
-          step="0.005"
-          value="0.10"
-        />
-        <button class="btn" id="regenerate">Regenerate</button>
-
-        <hr style="opacity: 0.15" />
-        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">Grass</h2>
-        <label>Tip flexibility</label>
-        <input
-          id="flex"
-          type="range"
-          min="0.2"
-          max="3.0"
-          step="0.01"
-          value="1.4"
-        />
-        <label>Blade height (avg)</label>
-        <input
-          id="height"
-          type="range"
-          min="0.2"
-          max="1.8"
-          step="0.01"
-          value="1.0"
-        />
-        <button class="btn" id="scatter">Scatter plants</button>
-      </aside>
+          <label>Tank Size</label>
+          <input id="tankSize" type="range" min="1.0" max="100.0" step="0.01" value="50.0" />
+          
+        </div>
+        
+        <!-- Fish Controls -->
+        <div class="control-section" id="section-fish">
+          <h1>🐠 Goldfish</h1>
+          
+          <h2>Body</h2>
+          <label>Body Length</label>
+          <input id="bodyLength" type="range" min="0.5" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Body Height</label>
+          <input id="bodyHeight" type="range" min="0.3" max="1.5" step="0.01" value="0.8" />
+          
+          <label>Body Width</label>
+          <input id="bodyWidth" type="range" min="0.3" max="1.2" step="0.01" value="0.6" />
+          
+          <label>Arch</label>
+          <input id="arch" type="range" min="0.0" max="1.0" step="0.01" value="0.5" />
+          
+          <h2>Head</h2>
+          <label>Head Size</label>
+          <input id="headSize" type="range" min="0.5" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Mouth Tilt</label>
+          <input id="mouthTilt" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <h2>Caudal Fin (Tail)</h2>
+          <label>Caudal Length</label>
+          <input id="caudalLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Caudal Width</label>
+          <input id="caudalWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <h2>Dorsal Fin (Top)</h2>
+          <label>Dorsal Length</label>
+          <input id="dorsalLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Dorsal Width</label>
+          <input id="dorsalWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Dorsal Shift</label>
+          <input id="dorsalShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <h2>Pelvic Fins (Bottom)</h2>
+          <label>Pelvic Length</label>
+          <input id="pelvicLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pelvic Width</label>
+          <input id="pelvicWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pelvic Shift</label>
+          <input id="pelvicShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <label>Pelvic Angle</label>
+          <input id="pelvicAngle" type="range" min="-1.57" max="1.57" step="0.01" value="0.0" />
+          
+          <h2>Pectoral Fins (Side)</h2>
+          <label>Pectoral Length</label>
+          <input id="pectoralLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pectoral Width</label>
+          <input id="pectoralWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pectoral Shift</label>
+          <input id="pectoralShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <label>Pectoral Angle</label>
+          <input id="pectoralAngle" type="range" min="-1.57" max="1.57" step="0.01" value="0.0" />
+          
+          <h2>Anal Fin (Bottom Rear)</h2>
+          <label>Anal Fin Length</label>
+          <input id="afinLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Anal Fin Width</label>
+          <input id="afinWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Anal Fin Shift</label>
+          <input id="afinShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+        </div>
+        
+        <!-- Grass Controls -->
+        <div class="control-section" id="section-grass">
+          <h1>🌿 Grass</h1>
+          
+          <label>Blade count: <span id="plantCountLabel"></span></label>
+          <input id="plantCount" type="range" min="10" max="600" value="200" />
+          
+          <label>Tip flexibility</label>
+          <input id="flex" type="range" min="0.2" max="3.0" step="0.01" value="1.4" />
+          
+          <label>Blade height (avg)</label>
+          <input id="height" type="range" min="0.2" max="1.8" step="0.01" value="1.0" />
+          
+          <button class="btn" id="scatter">Regenerate Grass</button>
+        </div>
+        
+        <!-- Egeria Controls -->
+        <div class="control-section" id="section-egeria">
+          <h1>🪴 Egeria Densa</h1>
+          
+          <label>Stem count</label>
+          <input id="egeriaCount" type="range" min="20" max="400" value="120" />
+          
+          <label>Leaf width (scale)</label>
+          <input id="egeriaLeafWidth" type="range" min="0.6" max="2.0" step="0.01" value="1.00" />
+          
+          <label>Stem nodes</label>
+          <input id="egeriaNodes" type="range" min="8" max="20" value="12" />
+          
+          <label>Branch chance</label>
+          <input id="egeriaBranch" type="range" min="0" max="0.25" step="0.005" value="0.10" />
+        </div>
+        
+        <!-- Barclaya Controls -->
+        <div class="control-section" id="section-barclaya">
+          <h1>🍃 Barclaya</h1>
+          <p style="font-size: 12px; opacity: 0.8; margin: 8px 0;">Red-brown aquatic plant with large leaves</p>
+        </div>
+        
+        <!-- Driftwood Controls -->
+        <div class="control-section" id="section-driftwood">
+          <h1>🪵 Driftwood</h1>
+          
+          <label>Pieces</label>
+          <input id="woodPieces" type="range" min="1" max="6" value="3" />
+          
+          <label>Branches per piece</label>
+          <input id="woodBranches" type="range" min="1" max="8" value="3" />
+          
+          <label>Gnarliness</label>
+          <input id="woodGnarl" type="range" min="0" max="1" step="0.01" value="0.55" />
+          
+          <label>Twist</label>
+          <input id="woodTwist" type="range" min="0" max="1" step="0.01" value="0.55" />
+          
+          <label>Detail</label>
+          <input id="woodDetail" type="range" min="0" max="1" step="0.01" value="0.6" />
+          
+          <label>Grain frequency</label>
+          <input id="woodGrain" type="range" min="10" max="60" step="1" value="28" />
+          
+          <label>Grain contrast</label>
+          <input id="woodGrainMix" type="range" min="0" max="1" step="0.01" value="0.45" />
+          
+          <label>Color warmth</label>
+          <input id="woodWarm" type="range" min="0" max="1" step="0.01" value="0.65" />
+        </div>
+        
+        <!-- Boulder Controls -->
+        <div class="control-section" id="section-boulders">
+          <h1>🪨 Boulders</h1>
+          
+          <label>Boulder count: <span id="boulderCountLabel"></span></label>
+          <input id="boulderCount" type="range" min="0" max="24" value="6" />
+          
+          <button class="btn" id="boulderRegenerate">Regenerate Boulders</button>
+        </div>
+        
+        <!-- Fish House Controls -->
+        <div class="control-section" id="section-fishhouse">
+          <h1>🍍 Fish House</h1>
+          <p style="font-size: 12px; opacity: 0.8; margin: 8px 0;">Pineapple-shaped shelter for fish</p>
+        </div>
+        
+        <!-- Floor Controls -->
+        <div class="control-section" id="section-floor">
+          <h1>⬛ Tank Floor</h1>
+          
+          <label>Sand ↔ Gravel</label>
+          <input id="floorGravelMix" type="range" min="0" max="1" step="0.01" value="0" />
+          
+          <label>Height amplitude</label>
+          <input id="floorAmp" type="range" min="0" max="0.5" step="0.005" value="0.18" />
+          
+          <label>Pebble density</label>
+          <input id="floorGravelScale" type="range" min="2" max="20" step="0.5" value="7" />
+          
+          <label>Pebble bump</label>
+          <input id="floorGravelBump" type="range" min="0" max="0.06" step="0.002" value="0.02" />
+          
+          <h2>Palette</h2>
+          <label><input type="radio" name="floorPalette" id="floorPalSand" checked> Sand</label>
+          <label><input type="radio" name="floorPalette" id="floorPalGrey"> Grey gravel</label>
+          <label><input type="radio" name="floorPalette" id="floorPalRainbow"> Rainbow gravel</label>
+        </div>
+      </div>
     </div>
+    
+    <script>
+      // Icon sidebar toggle functionality
+      const iconButtons = document.querySelectorAll('.icon-btn');
+      const controlPanel = document.getElementById('controlPanel');
+      let currentSection = null;
+      
+      iconButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const section = btn.dataset.section;
+          
+          // If clicking the same section, close the panel
+          if (currentSection === section && controlPanel.classList.contains('open')) {
+            controlPanel.classList.remove('open');
+            btn.classList.remove('active');
+            iconButtons.forEach(b => b.classList.remove('active'));
+            currentSection = null;
+            return;
+          }
+          
+          // Hide all sections
+          document.querySelectorAll('.control-section').forEach(s => {
+            s.classList.remove('active');
+          });
+          
+          // Show selected section
+          document.getElementById(`section-${section}`).classList.add('active');
+          
+          // Update active states
+          iconButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          
+          // Open panel
+          controlPanel.classList.add('open');
+          currentSection = section;
+        });
+      });
+    </script>
+    
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
