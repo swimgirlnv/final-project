@@ -36,12 +36,14 @@ void main() {
   // just pass defined color to frag shader for now
   v_color = vs_Col;
 
-  vec4 V = u_view * vec4(vs_Pos, 1.0);
+  vec3 newPos = vec3(vs_Pos.x + (sin(3.0 * (u_time + vs_Pos.z)) * 0.05), vs_Pos.y, vs_Pos.z);
+
+  vec4 V = u_view * vec4(newPos, 1.0);
   v_camDist = length(V.xyz);
   vec4 world = u_proj * V;
 
   // Project
-  v_pos = vec3(world.x, world.y, world.z);
+  v_pos = vs_Pos;
   gl_Position = world;
 }`;
 
@@ -58,14 +60,95 @@ uniform vec3  u_fogColor;
 uniform float u_fogNear;
 uniform float u_fogFar;
 
+float random (in vec3 _st) {
+    return fract(sin(dot(_st.xyz,
+                         vec3(12.9898,78.233,53.026)))*
+        43758.5453123);
+}
+
+// This noise function is featured
+// in the book of shaders section on Fractal Brownian Motion,
+// but from shadertoy (https://www.shadertoy.com/view/4dS3Wd)
+// I am going to add explanations for future use/tweaking, and
+// modify this for 3D noise
+float noise (in vec3 _st) {
+
+    // Creating grid from points (similar to voronoi setup)
+    vec3 i = floor(_st);
+    // also getting fractional component for interpolation
+    vec3 fc = fract(_st);
+
+    float a = random(i);
+    float b = random(i + vec3(1.0, 0.0, 0.0));
+    float c = random(i + vec3(1.0, 1.0, 0.0));
+    float d = random(i + vec3(0.0, 1.0, 0.0));
+    float e = random(i + vec3(1.0, 1.0, 1.0));
+    float f = random(i + vec3(1.0, 0.0, 1.0));
+    float g = random(i + vec3(0.0, 1.0, 1.0));
+    float h = random(i + vec3(0.0, 0.0, 1.0));
+
+    // These are interpolation terms for smoothing
+    // ( discussed 9/8/2025 in class)
+    vec3 u = fc * fc * (3.0 - 2.0 * fc);
+
+    // 3D interpolation using the smoothed factor from before.
+    // This can probably be vastly simplified similar to the 2D
+    // version of the function
+
+    return mix(
+        mix(
+            mix(a, b, u.x),     // segment 1
+            mix(d, c, u.x),     // segment 2
+            u.y
+        ),                      // plane 1 (bottom)
+        mix(
+            mix(h, f, u.x),     // segment 3
+            mix(g, e, u.x),     // segment 4
+            u.y
+        ),                      // plane 2
+        u.z
+    );
+}
+
+#define NUM_OCTAVES 5
+
+// This is also from book of shaders,
+// and is the FBM implementation.
+// I changed it so that it works in three
+// dimensions, but the 2D one is here: https://thebookofshaders.com/13/
+float fbm ( in vec3 _st) {
+    float v = 0.0;                      // final output
+    float a = 0.5;                      // amplitude of wave
+    vec3 shift = vec3(100.0);           // offset for wave
+
+    mat3 rot = mat3(
+        1., 0., 0.,
+        0., cos(0.5), sin(0.5),
+        0., -sin(0.5), cos(0.50)
+    );
+
+    for (int i = 0; i < NUM_OCTAVES; ++i) {
+        v += a * noise(_st);
+
+        // "2.0" is the lacunarity, or the factor by which frequency is multiplied each octave
+        _st = rot * _st * 2.0 + shift; 
+
+        // Gain (factor by which amplitude is multiplied each octave)
+        a *= 0.5;
+    }
+    return v;
+}
+
 // Simple caustics look via animated stripes
 float caustic(float x){
   return 0.5 + 0.5*sin(x);
 }
 
 void main() {
+  vec3 newCol = vec3(fbm(v_pos * 10.0));
+
   float fog = smoothstep(u_fogNear, u_fogFar, v_camDist); // 0 near -> 1 far
-  vec3 col = mix(v_color, u_fogColor, fog);
+  vec3 col = mix(newCol, u_fogColor, fog);
   outColor = vec4(col, 1.0);
 }
 `;

@@ -36,25 +36,25 @@ function createFishGeometry(gl) {
     positions, indices, colors,
     // body params
     // bodyLength, bodyHeight, bodyWidth, belly_size, arch
-    0.5, 0.5, 1.0, 0.0,
+    1.35, 0.6, 0.7, 0.0,
     // head params
     // headSize, eyeType, mouthTilt
-    {x: 0.5, y: 0.5, z: 0.5}, eye_types.GOOGLY, 0.0,
+    {x: 0.03, y: 0.06, z: 0.3}, eye_types.GOOGLY, 0.0,
     // caudal params
     // caudalLength, caudalWidth, caudalType, caudalAngle
-    1.0, 1.0, caudal_types.BUTTERFLY,
+    0.6, 0.75, caudal_types.DROOPY,
     // dorsal params
     // dorsalLength, dorsalWidth, dorsalShift, dorsalType
-    1.0, 1.0, 0.0, dorsal_types.PUNK,
+    0.4, 0.35, 0.49, dorsal_types.PUNK,
     // pelvic params
     // pelvicLength, pelvicWidth, pelvicShift, pelvicAngle
-    0.85, 1.0, 0.55, 0.0,
+    0.5, 1.0, 0.55, -0.5,
     // pectoral params
     // pectoralLength, pectoralWidth, pectoralShift, pectoralAngle
-    1.0, 1.0, 0.0, 0.0,
+    0.5, 1.05, 0.25, -0.35,
     // afin params
-    // afinLength, afinWidth, afinType, afinShift, afinAngle
-    1.0, 1.0, afin_types.FEATHERY, 0.0
+    // afinLength, afinWidth, afinType, afinShift
+    0.2, 0.21, afin_types.SPIKY, 0.68
   );
 
   const vao = gl.createVertexArray();
@@ -97,13 +97,45 @@ function createFishGeometry(gl) {
     attribs: { vs_Pos : vs_Pos_loc, vs_Col : vs_Col_loc },
     // Store initial params so we can easily see what was used last
     params: {
-        bodyLength: 0.5, bodyHeight: 0.5, bodyWidth: 1.0, arch: 0.0,
-        headSize: {x: 1.0, y: 1.0, z: 1.0}, eyeType: eye_types.GOOGLY, mouthTilt: 0.5,
-        caudalLength: 1.0, caudalWidth: 1.0, caudalType: caudal_types.BUTTERFLY,
-        dorsalLength: 1.0, dorsalWidth: 1.0, dorsalShift: 0.0, dorsalType: dorsal_types.PUNK,
-        pelvicLength: 1.0, pelvicWidth: 1.0, pelvicShift: 0.0, pelvicAngle: Math.PI * 2.0 / 2.0, // ADD pelvicAngle
-        pectoralLength: 1.0, pectoralWidth: 1.0, pectoralShift: 0.0, pectoralAngle: Math.PI * 2.0 / 2.0, // ADD pectoralAngle
-        afinLength: 1.0, afinWidth: 1.0, afinType: afin_types.FEATHERY, afinShift: 0.0, afinAngle: Math.PI * 2.0 / 2.0 // ADD afinShift, afinAngle
+      // Body
+      bodyLength: 1.35, 
+      bodyHeight: 0.6, 
+      bodyWidth: 0.7, 
+      arch: 0.0, // Mapped from the 4th argument (0.0)
+      
+      // Head
+      headSize: {x: 0.03, y: 0.06, z: 0.3}, 
+      eyeType: eye_types.GOOGLY, 
+      mouthTilt: 0.0,
+      
+      // Caudal (Tail)
+      caudalLength: 0.6, 
+      caudalWidth: 0.75, 
+      caudalType: caudal_types.DROOPY,
+      
+      // Dorsal
+      dorsalLength: 0.4, 
+      dorsalWidth: 0.35, 
+      dorsalShift: 0.49, 
+      dorsalType: dorsal_types.PUNK,
+      
+      // Pelvic
+      pelvicLength: 0.5, 
+      pelvicWidth: 1.0, 
+      pelvicShift: 0.55, 
+      pelvicAngle: -0.5,
+      
+      // Pectoral
+      pectoralLength: 0.5, 
+      pectoralWidth: 1.05, 
+      pectoralShift: 0.25, 
+      pectoralAngle: -0.35,
+      
+      // Afin (Anal Fin)
+      afinLength: 0.2, 
+      afinWidth: 0.21, 
+      afinType: afin_types.SPIKY, 
+      afinShift: 0.68
     }
   };
 }

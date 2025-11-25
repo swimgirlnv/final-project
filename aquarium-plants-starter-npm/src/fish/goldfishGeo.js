@@ -376,7 +376,7 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
   }
 
   let eyeShift = 0.4;
-  let eyeAngle = 0.0;
+  let eyeAngle = 0.5;
   let infoPacket =
   {
     l: {
@@ -393,12 +393,12 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
   getEyeInfo(infoPacket, eyeShift, eyeAngle);
 
   function positionEye(eyeInfo) {
-    let fcn_eye_idx = sphere(positions, indices, colors, {x: 0.0, y: 0.0, z: 0.0}, {r: 0.1, g: 0.1, b: 0.5}, 1.0);
+    let fcn_eye_idx = sphere(positions, indices, colors, {x: 0.0, y: 0.0, z: 0.0}, {r: 0.1, g: 0.1, b: 0.5}, headSize.y);
     
     // 1. Flatten the eye so we can see the orientation.
     // Z is 0.3 (Thin disk). 
-    scale_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 1.0, y: 1.0, z: 0.3});
-    rotate_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 0.0, y: 0.0, z: 0.0})
+    scale_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 0.5, y: 0.5, z: 0.5});
+    rotate_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 90.0, y: 0.0, z: 0.0})
 
     let fcn_origin = eyeInfo.pos;
     let fcn_forward = eyeInfo.norm;    // The Normal (Out of skin)
@@ -480,7 +480,7 @@ export const caudal_types = {
   VBUTT: "VBUTT",
   BUTTERFLY: "BUTTERFLY"
 };
-function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, caudalWidth, caudalType) {
+function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, caudalWidth, bodyLength, caudalType) {
   let iterVal = caudalWidth / 4.0;
 
   let all_idx = [];
@@ -527,7 +527,7 @@ function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, cauda
 
   scale_around_point
   
-  translate(positions, all_idx, vec3(0.0, caudalLength * 0.3, 0.0));
+  translate(positions, all_idx, vec3(0.0, bodyLength * 0.03 + caudalLength * 0.255, 0.0));
   scale_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(0.5, caudalLength * 0.5, 0.5));
 
   rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(90.0, 0.0, 0.0));
@@ -552,66 +552,65 @@ function gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dor
     0.5
   );
   
-  let dorsalPath = posPath.getPoint(dorsalShift);
-  let dorsalPathScale = scalePath.getPoint(dorsalShift);
+  // This is the radius of the fin tube itself. 
+  // We need to lift the center of every ring by this amount so it sits ON the skin.
+  const finRadius = dorsalWidth / 2.0;
 
-  // ensures length is not too long
+  const embedOffset = dorsalWidth * 0.25;
+
   let clampedLength = Math.min(dorsalShift + dorsalLength, 1.0) - dorsalShift;
+  clampedLength = Math.max(clampedLength, dorsalWidth * (7.0 / 6.0) * 0.15);
   let incVal = clampedLength / 3.0;
 
-  // finding offsets for each ring
-  let ring1Offset = posPath.getPoint(dorsalShift);
-  let r1O = vec3(ring1Offset[0], ring1Offset[1], ring1Offset[2]);
-  r1O.y += scalePath.getPoint(dorsalShift)[1];
+  // --- HELPER: Calculate Absolute Ring Center ---
+  function getRingCenter(t) {
+      let p = posPath.getPoint(t);   
+      let s = scalePath.getPoint(t); 
+      
+      // Logic: Spine + Skin_Height + Fin_Radius - Embed_Amount
+      let yPos = p[1] + s[1] + finRadius - embedOffset;
+      
+      return vec3(p[0], yPos, p[2]);
+  }
 
-  let ring2Offset = posPath.getPoint(dorsalShift + incVal);
-  ring2Offset[1] += scalePath.getPoint(dorsalShift + incVal)[1];
-  let r2O = sub(vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), r1O);
-  
-  let ring3Offset = posPath.getPoint(dorsalShift + incVal * 2.0);
-  ring3Offset[1] += scalePath.getPoint(dorsalShift + incVal * 2.0)[1];
-  let r3O = sub(vec3(ring3Offset[0], ring3Offset[1], ring3Offset[2]), vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]));
-  
-  let ring4Offset = posPath.getPoint(dorsalShift + incVal * 3.0);
-  ring4Offset[1] += scalePath.getPoint(dorsalShift + incVal * 3.0)[1];
-  let r4O = sub(vec3(ring4Offset[0], ring4Offset[1], ring4Offset[2]), vec3(ring3Offset[0], ring3Offset[1], ring3Offset[2]));
+  // 3. Pre-calculate positions (now slightly lower)
+  let pos1 = getRingCenter(dorsalShift);
+  let pos2 = getRingCenter(dorsalShift + incVal);
+  let pos3 = getRingCenter(dorsalShift + incVal * 2.0);
+  let pos4 = getRingCenter(dorsalShift + incVal * 3.0);
 
-  // generating rings
+  let delta1to2 = sub(pos2, pos1);
+  let delta2to3 = sub(pos3, pos2);
+  let delta3to4 = sub(pos4, pos3);
+
   let all_idx = [];
 
-  let first_idx = create_ring(positions, indices, colors, 6, 0.05, dorsalWidth * 0.5, r1O);
+  // --- Ring 1 ---
+  let first_idx = create_ring(positions, indices, colors, 6, 0.05, finRadius, pos1);
   let startPole = fill_ring_pole(positions, indices, first_idx, colors, vec3(0.0, 0.0, 0.0), false);
 
-  let second_idx = extrude_ring(positions, indices, first_idx, colors, vec3(0.0, r2O.y, incVal));
-  scale_around_point(positions, second_idx, vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), vec3(1.0, 0.8, 1.0));
+  // --- Ring 2 ---
+  let second_idx = extrude_ring(positions, indices, first_idx, colors, delta1to2);
+  scale_around_point(positions, second_idx, vec3(pos2.x, pos2.y, pos2.z), vec3(1.0, 0.8, 1.0));
 
-  let third_idx = extrude_ring(positions, indices, second_idx, colors, vec3(0.0, r3O.y, incVal));
-  scale_around_point(positions, third_idx, vec3(ring3Offset[0], ring3Offset[1], ring3Offset[2]), vec3(1.0, 1.2, 1.0));
+  // --- Ring 3 ---
+  let third_idx = extrude_ring(positions, indices, second_idx, colors, delta2to3);
+  scale_around_point(positions, third_idx, vec3(pos3.x, pos3.y, pos3.z), vec3(1.0, 1.2, 1.0));
 
-  let fourth_idx = extrude_ring(positions, indices, third_idx, colors, vec3(0.0, r4O.y, incVal));
-  scale_around_point(positions, fourth_idx, vec3(ring4Offset[0], ring4Offset[1], ring4Offset[2]), vec3(1.0, 1.05, 1.0));
+  // --- Ring 4 ---
+  let fourth_idx = extrude_ring(positions, indices, third_idx, colors, delta3to4);
+  scale_around_point(positions, fourth_idx, vec3(pos4.x, pos4.y, pos4.z), vec3(1.0, 1.05, 1.0));
+  
   let endPole = fill_ring_pole(positions, indices, fourth_idx, colors, vec3(0.0, 0.0, 0.0), true);
 
-  // group for end
+  // --- Rotations ---
   let end_idx = [...fourth_idx, ...endPole];
+  rotate_around_point(positions, second_idx, vec3(pos2.x, pos2.y, pos2.z), vec3(10.0, 0.0, 0.0));
+  rotate_around_point(positions, third_idx, vec3(pos3.x, pos3.y, pos3.z), vec3(15.0, 0.0, 0.0));
+  rotate_around_point(positions, end_idx, vec3(pos4.x, pos4.y, pos4.z), vec3(25.0, 0.0, 0.0));
 
-  // fin curves
-  rotate_around_point(positions, second_idx, vec3(ring2Offset[0], ring2Offset[1], ring2Offset[2]), vec3(10.0, 0.0, 0.0));
-  rotate_around_point(positions, third_idx, vec3(ring3Offset[0], ring3Offset[1], ring3Offset[2]), vec3(15.0, 0.0, 0.0));
-  rotate_around_point(positions, end_idx, vec3(ring4Offset[0], ring4Offset[1], ring4Offset[2]), vec3(25.0, 0.0, 0.0));
+  all_idx.push(...first_idx, ...startPole, ...second_idx, ...third_idx, ...fourth_idx, ...endPole);
 
-  all_idx.push(
-    ...first_idx, 
-    ...startPole, 
-    ...second_idx, 
-    ...third_idx,
-    ...fourth_idx,
-    ...endPole
-  );
-
-  // positioning final fin
-  //translate(positions, all_idx, addVec(dorsalPos, vec3(0.0, 0.0, 0.0)));
-  //rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(5.0, 0.0, 0.0));
   return all_idx;
 }
 
@@ -832,7 +831,7 @@ export function goldfish(
   headSize.x *= 0.1;
   headSize.y *= 0.2;
   gfish_head(positions, indices, colors, head_pos, head_body_size, headSize, eye_types.BUBBLY, mouthTilt);
-  gfish_caudal(positions, indices, colors, caudal_pos, caudalLength, caudalWidth, caudal_types.VBUTT); 
+  gfish_caudal(positions, indices, colors, caudal_pos, caudalLength, caudalWidth, bodyLength, caudal_types.VBUTT); 
   gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalShift, posCtrlPoints, scaleCtrlPoints, dorsalType);
   gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType);
 
