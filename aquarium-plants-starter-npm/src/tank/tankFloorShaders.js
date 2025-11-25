@@ -1,7 +1,8 @@
 export const vs = `#version 300 es
 precision highp float;
 
-in vec2 a_xz; // grid position (x,z) in tank space
+in vec3  a_pos;   // x,z in tank space; y is side t for side faces
+in float a_face;  // 0 = top, 1 = side, 2 = bottom
 
 uniform mat4  u_proj, u_view;
 uniform float u_time;
@@ -19,6 +20,10 @@ uniform int   u_palette;
 // Sand colors (used as base even when gravel)
 uniform vec3  u_sandA;
 uniform vec3  u_sandB;
+
+// New: depth of sand block + tank size (for side normals)
+uniform float u_sandDepth;
+uniform vec2  u_tankHalf;
 
 out vec3  v_color;
 out float v_camDist;
@@ -45,7 +50,7 @@ float fbm(vec2 p){
   return f;
 }
 
-// --- tiny helpers -------------------------------------------------------------
+// tiny helpers -------------------------------------------------------------
 float hash11(float n){ return fract(sin(n)*43758.5453123); }
 float hash12(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
 
@@ -104,9 +109,9 @@ float groundHeight(vec2 p){
 }
 
 void main(){
-  vec2 p = a_xz;
+  vec2 p = a_pos.xz;
 
-  // height & derivatives (for good normals)
+  // surface height and derivatives for top
   float h = groundHeight(p);
   float e = 0.02;
 
@@ -118,9 +123,46 @@ void main(){
   float dhdx = (h_x1 - h_x2) / (2.0 * e);
   float dhdz = (h_z1 - h_z2) / (2.0 * e);
 
-  vec3 n = normalize(vec3(-dhdx, 1.0, -dhdz));
+  vec3 nTop = normalize(vec3(-dhdx, 1.0, -dhdz));
 
-  // --- color: sand + gravel tint ---
+  float yTop    = h;
+  float yBottom = h - u_sandDepth;
+
+  float isTop    = step(-0.5, a_face) * (1.0 - step(0.5, a_face)); // a_face≈0
+  float isSide   = step(0.5, a_face) * (1.0 - step(1.5, a_face));  // ≈1
+  float isBottom = step(1.5, a_face);                              // ≥2
+
+  vec3 world;
+  vec3 n;
+
+  if (isTop > 0.5) {
+    world = vec3(p.x, yTop, p.y);
+    n = nTop;
+  } else if (isSide > 0.5) {
+    // a_pos.y stores side vertical t: 0 bottom, 1 top
+    float tSide = clamp(a_pos.y, 0.0, 1.0);
+    float y = mix(yBottom, yTop, tSide);
+    world = vec3(p.x, y, p.y);
+
+    // side normal points inward based on which wall we’re on
+    vec3 wn = vec3(0.0);
+    float eps = 0.001;
+    if (abs(abs(p.x) - u_tankHalf.x) < eps) {
+      float s = sign(p.x);
+      wn = vec3(-s, 0.0, 0.0);  // inward
+    } else if (abs(abs(p.y) - u_tankHalf.y) < eps) {
+      float s = sign(p.y);
+      wn = vec3(0.0, 0.0, -s);
+    } else {
+      wn = nTop;
+    }
+    n = normalize(wn);
+  } else {
+    world = vec3(p.x, yBottom, p.y);
+    n = vec3(0.0, -1.0, 0.0);
+  }
+
+  // --- color: sand + gravel tint (same as before) ---
   vec3 ci  = cellInfo(p);
   float d  = ci.x;
   float mask = 1.0 - smoothstep(0.0, 0.8, d);
@@ -128,15 +170,12 @@ void main(){
 
   vec3 gravelCol;
   if (u_palette == 1) {
-    // grey gravel
     float g = 0.45 + 0.45 * hash12(ci.yz);
     gravelCol = vec3(g) * vec3(1.0, 0.98, 0.96);
   } else if (u_palette == 2) {
-    // rainbow gravel
     float hcol = hash12(ci.yz);
     gravelCol = h2rgb(hcol) * (0.75 + 0.35 * hash11(hcol * 91.7));
   } else {
-    // warm shell-like gravel
     float t = 0.7 + 0.3 * hash12(ci.yz + 7.0);
     gravelCol = mix(u_sandA, u_sandB, t);
   }
@@ -144,17 +183,13 @@ void main(){
   vec3 L = normalize(vec3(-0.2, 1.0, 0.3));
   float ndl = clamp(dot(n, L), 0.0, 1.0);
 
-  // sand shading
   vec3 sand = mix(u_sandA, u_sandB, 0.4 + 0.6 * ndl);
-  // brighter on higher dunes
   sand *= 0.95 + 0.1 * smoothstep(-0.10, 0.08, h);
 
-  // mix sand ↔ gravel
   vec3 baseCol = mix(sand, gravelCol, mask);
 
-  // outputs
   v_color = baseCol;
-  vec3 world = vec3(p.x, h, p.y);
+
   vec4 V = u_view * vec4(world, 1.0);
   v_camDist = length(V.xyz);
   gl_Position = u_proj * V;
