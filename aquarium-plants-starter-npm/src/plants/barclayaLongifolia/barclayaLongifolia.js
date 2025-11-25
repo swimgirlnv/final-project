@@ -6,10 +6,10 @@ import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 // ---- Noise + clump field ---------------------------------------------------
 const TANK = { xHalf: TANK_X_HALF, zHalf: TANK_Z_HALF }; // overall footprint used for clump cells
 const CLUMP = {
-  cell: 0.9,        // grid cell size → spacing between possible Barclaya clumps
-  radius: 0.35,     // how far rosettes spread from a clump center
-  noiseScale: 0.7,  // FBM frequency for clump presence
-  threshold: 0.55,  // higher = fewer clumps
+  cell: 0.9, // grid cell size → spacing between possible Barclaya clumps
+  radius: 0.35, // how far rosettes spread from a clump center
+  noiseScale: 0.7, // FBM frequency for clump presence
+  threshold: 0.55, // higher = fewer clumps
 };
 
 function fract1(x) {
@@ -19,11 +19,13 @@ function hash2(i, j) {
   return fract1(Math.sin(i * 127.1 + j * 311.7) * 43758.5453);
 }
 function noise2(x, y) {
-  const ix = Math.floor(x), iy = Math.floor(y);
-  const fx = x - ix, fy = y - iy;
-  const a = hash2(ix,     iy);
+  const ix = Math.floor(x),
+    iy = Math.floor(y);
+  const fx = x - ix,
+    fy = y - iy;
+  const a = hash2(ix, iy);
   const b = hash2(ix + 1, iy);
-  const c = hash2(ix,     iy + 1);
+  const c = hash2(ix, iy + 1);
   const d = hash2(ix + 1, iy + 1);
   const u = fx * fx * (3 - 2 * fx);
   const v = fy * fy * (3 - 2 * fy);
@@ -32,7 +34,9 @@ function noise2(x, y) {
   return ab * (1 - v) + cd * v; // 0..1
 }
 function fbm2(x, y, oct = 4) {
-  let f = 0.0, amp = 0.5, freq = 1.0;
+  let f = 0.0,
+    amp = 0.5,
+    freq = 1.0;
   for (let k = 0; k < oct; k++) {
     f += amp * noise2(x * freq, y * freq);
     amp *= 0.5;
@@ -254,11 +258,7 @@ export function createBarclayaLayer(gl) {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.yawPitch);
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(d.yawPitch));
         gl.bindBuffer(gl.ARRAY_BUFFER, this.curveUndul);
-        gl.bufferSubData(
-          gl.ARRAY_BUFFER,
-          0,
-          new Float32Array(d.curveUndul)
-        );
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(d.curveUndul));
         gl.bindBuffer(gl.ARRAY_BUFFER, this.hueVar);
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(d.hueVar));
         this.count = d.count;
@@ -299,7 +299,7 @@ export function createBarclayaLayer(gl) {
     minLeaves: 5,
     maxLeaves: 11, // per rosette
     undulFreq: 22.0, // edge ripple frequency
-    spread: { x: TANK_X_HALF * .95, z: TANK_Z_HALF * .95 }, // tank footprint (used only for fallback singles)
+    spread: { x: TANK_X_HALF * 0.95, z: TANK_Z_HALF * 0.95 }, // tank footprint (used only for fallback singles)
     redProb: 0.35, // chance a leaf is magenta-leaning
   };
 
@@ -312,9 +312,7 @@ export function createBarclayaLayer(gl) {
 
   // Helper to place one rosette at (cx, cz) with full collision checks
   function placeRosetteAt(cx, cz, grid, d) {
-    const leaves = Math.floor(
-      rand(state.minLeaves, state.maxLeaves + 0.999)
-    );
+    const leaves = Math.floor(rand(state.minLeaves, state.maxLeaves + 0.999));
     const yawSeed = rand(0, Math.PI * 2);
     const localAccepted = [];
 
@@ -449,6 +447,11 @@ export function createBarclayaLayer(gl) {
     regenerate,
     draw(shared) {
       if (inst.count === 0) return;
+
+      // --- temporarily disable back-face culling for Barclaya ribbons ---
+      const cullWasOn = gl.isEnabled(gl.CULL_FACE);
+      if (cullWasOn) gl.disable(gl.CULL_FACE);
+
       gl.useProgram(program);
       gl.bindVertexArray(ribbon.vao);
 
@@ -475,6 +478,9 @@ export function createBarclayaLayer(gl) {
         0,
         inst.count
       );
+
+      // --- restore previous culling state ---
+      if (cullWasOn) gl.enable(gl.CULL_FACE);
     },
   };
 }
