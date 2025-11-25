@@ -1,5 +1,7 @@
 {
-  "buildCommand": "cd aquarium-plants-starter-npm && npm run build",
-  "outputDirectory": "aquarium-plants-starter-npm/dist",
-  "installCommand": "cd aquarium-plants-starter-npm && npm install"
+  "buildCommand": "npm install && npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "framework": null,
+  "cwd": "aquarium-plants-starter-npm"
 }
