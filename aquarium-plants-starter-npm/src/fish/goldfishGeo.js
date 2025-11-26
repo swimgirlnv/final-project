@@ -38,10 +38,10 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
 ) {
   const posCtrlPoints = 
   [  // position spline
-    [0.0, 1.0 - arch, 0.0],
-    [0.0, 1.02 - (arch * 0.5), bodyLength * 0.4],
-    [0.0, 1.03, bodyLength * 0.7],
-    [0.0, 1.035, bodyLength]
+    [0.0, 0.0 - arch, 0.0],
+    [0.0, 0.02 - (arch * 0.5), bodyLength * 0.4],
+    [0.0, 0.03, bodyLength * 0.7],
+    [0.0, 0.035, bodyLength]
   ];
   posCtrlPoints_out.push(...posCtrlPoints);
   const scaleCtrlPoints = 
@@ -66,11 +66,11 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
   );
 
   caudal_pos.x = 0.0;
-  caudal_pos.y = 1.035;
+  caudal_pos.y = 0.035;
   caudal_pos.z = bodyLength;
 
   head_pos.x = 0.0;
-  head_pos.y = 1.0 - arch;
+  head_pos.y = -arch;
   head_pos.z = 0.0;
 
   const posPath = new CatmullRomSpline3D(
@@ -267,7 +267,7 @@ export const eye_types = {
   CHEEKS: "CHEEKS",
   BUBBLY: "BUBBLY" 
 };
-function gfish_head(positions, indices, colors, labels, headPos, neckSize, headSize = {}, eyeType, mouthTilt = 0.0) {
+function gfish_head(positions, indices, colors, labels, pivots, headPos, neckSize, headSize = {}, eyeScale, eyeType, mouthTilt = 0.0) {
   // ring, extrude while scaling down
   const numVertsRing = 8;
 
@@ -284,7 +284,8 @@ function gfish_head(positions, indices, colors, labels, headPos, neckSize, headS
     [headSize.x, headSize.y, 1.0]
   ];
 
-  let all_idx = create_ring_spline(
+  let all_idx = [];
+  let head_idx = create_ring_spline(
     positions, indices, colors,
     numVertsRing, // num verts in a ring (MUST BE EVEN for the mouth func to work)
     20,// num rings in spline
@@ -296,7 +297,8 @@ function gfish_head(positions, indices, colors, labels, headPos, neckSize, headS
     false,
     true
   );
-  assignLabel(labels, all_idx, 2);
+  assignLabel(labels, head_idx, 2);
+  all_idx.push(...head_idx);
 
   // Placing the eyes
   // define splines to sample points
@@ -399,7 +401,7 @@ function gfish_head(positions, indices, colors, labels, headPos, neckSize, headS
     
     // 1. Flatten the eye so we can see the orientation.
     // Z is 0.3 (Thin disk). 
-    scale_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 5.0 * headSize.x + 0.15, y: 5.0 * headSize.x + 0.15, z: 5.0 * headSize.x + 0.15});
+    scale_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: eyeScale, y: eyeScale, z: eyeScale});
     rotate_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 90.0, y: 0.0, z: 0.0})
 
     let fcn_origin = eyeInfo.pos;
@@ -432,10 +434,7 @@ function gfish_head(positions, indices, colors, labels, headPos, neckSize, headS
     ];
 
     apply_matrix_transform(positions, fcn_eye_idx, fcn_matrix, {x: 0.0, y: 0.0, z: 0.0});
-
-    // 4. Translate to position
-    // OPTIONAL: Add a tiny offset along the normal to prevent Z-fighting/Clipping
-    // let offsetPos = addVec(fcn_origin, scaleVec(newZ, 0.02)); 
+ 
     translate(positions, fcn_eye_idx, fcn_origin);
 
     return fcn_eye_idx;
@@ -444,8 +443,9 @@ function gfish_head(positions, indices, colors, labels, headPos, neckSize, headS
   let eyeR_idx = positionEye(infoPacket.l);
   assignLabel(labels, eyeR_idx, 3);
   all_idx.push(...eyeR_idx);
+
   let eyeL_idx = positionEye(infoPacket.r);
-  assignLabel(labels, eyeR_idx, 3);
+  assignLabel(labels, eyeL_idx, 3);
   all_idx.push(...eyeL_idx);
   // Making the mouth
 
@@ -469,12 +469,16 @@ function gfish_head(positions, indices, colors, labels, headPos, neckSize, headS
     {x: 0.65, y: 0.2, z: 1.0},
     {x:0.0, y:-0.025, z:-0.01}
   );
-  assignLabel(labels, mouth_idx, 2);
+  assignLabel(labels, mouth_idx, 4);
   all_idx.push(...mouth_idx);
   
   rotate_around_point(positions, all_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 0.0, y: 180.0, z: 0.0});
   translate(positions, all_idx, headPos);
   // end cap with special mouth geo function
+  assignPivot(pivots, head_idx, getCentroid(positions, head_idx));
+  assignPivot(pivots, eyeR_idx, getCentroid(positions, eyeR_idx));
+  assignPivot(pivots, eyeL_idx, getCentroid(positions, eyeL_idx));
+  assignPivot(pivots, mouth_idx, getCentroid(positions, mouth_idx));
   return all_idx;
 }
 
@@ -485,7 +489,7 @@ export const caudal_types = {
   VBUTT: "VBUTT",
   BUTTERFLY: "BUTTERFLY"
 };
-function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, caudalWidth, bodyLength, caudalType) {
+function gfish_caudal(positions, indices, colors, pivots, caudalPos, caudalLength, caudalWidth, caudalCurve, bodyLength, caudalType) {
   let iterVal = caudalWidth / 4.0;
 
   let all_idx = [];
@@ -539,23 +543,24 @@ function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, cauda
   bend(
     positions, 
     firstHalf, 
-    1.5,                    // Amount (Swish strength)
+    1.5 * caudalCurve,      // Amount (Swish strength)
     vec3(0, 0, 0),          // Origin (The root of the tail)
-    caudalLength * 0.9,           // Max Length (For normalization)
+    caudalLength * 0.9,     // Max Length (For normalization)
     2,                      // Scale Axis: Z (Distance along the tail)
     1                       // Application Axis: X (Side-to-side movement)
   );
   bend(
     positions, 
     secondHalf, 
-    -1.5,                    // Amount (Swish strength)
+    -1.5 * caudalCurve,     // Amount (Swish strength)
     vec3(0, 0, 0),          // Origin (The root of the tail)
-    caudalLength * 0.9,           // Max Length (For normalization)
+    caudalLength * 0.9,     // Max Length (For normalization)
     2,                      // Scale Axis: Z (Distance along the tail)
     1                       // Application Axis: X (Side-to-side movement)
   );
   
   translate(positions, all_idx, caudalPos);
+  assignPivot(pivots, all_idx, getCentroid(positions, [all_idx[7], all_idx[40]]));
 
   return all_idx;
 }
@@ -697,7 +702,7 @@ function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, pelv
   return all_idx;
 }
 
-function gfish_pectoral(positions, indices, colors, pectoralInfo, pectoralLength, pectoralWidth) {
+function gfish_pectoral(positions, indices, colors, pivots, pectoralInfo, pectoralLength, pectoralWidth) {
   let origin = pectoralInfo.pos;
   let forward = pectoralInfo.norm;
   let up = pectoralInfo.tangent;
@@ -753,8 +758,6 @@ function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinS
 
   // 1. Define Radius and Embed Amount
   const finRadius = afinWidth * 0.5;
-  
-  // ADD this to the height (since we are on the bottom, adding moves it UP into the body)
   const embedOffset = afinWidth * 0.2; 
 
   // ensures length is not too long
@@ -765,9 +768,9 @@ function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinS
       let p = posPath.getPoint(t);   
       let s = scalePath.getPoint(t); 
       
-      // Logic: Spine - Skin_Height - Fin_Radius + Embed_Amount
-      // We subtract s[1] and finRadius to move to the bottom edge.
-      // We ADD embedOffset to tuck it slightly back inside the mesh.
+      // yPos is the CENTER of the ring.
+      // SpineY - BodyRadius - FinRadius moves center just below body.
+      // + embedOffset tucks it slightly back in.
       let yPos = p[1] - s[1] - finRadius + embedOffset;
       
       return vec3(p[0], yPos, p[2]);
@@ -778,6 +781,7 @@ function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinS
   let pos2 = getRingCenter(afinShift + clampedLength);
 
   // 3. Calculate Delta for exact extrusion
+  // We do NOT modify this manually anymore. We let the scaling handle the growth direction.
   let delta = sub(pos2, pos1);
 
   // --- GEOMETRY GENERATION ---
@@ -788,11 +792,16 @@ function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinS
   let startPole = fill_ring_pole(positions, indices, first_idx, colors, vec3(0.0, 0.0, 0.0), false);
 
   // Ring 2 (End)
-  // Extrude using the delta vector so it follows the body slope perfectly
   let second_idx = extrude_ring(positions, indices, first_idx, colors, delta);
   
-  // Apply the flair scaling (from your original code) around the calculated center
-  scale_around_point(positions, second_idx, vec3(pos2.x, pos2.y, pos2.z), vec3(1.0, 3.0, 1.0));
+  // --- THE FIX: ANCHORED SCALING ---
+  // To make it look anchored to the body, we must scale relative to the TOP of the ring.
+  // Since 'pos2' is the center, the top edge is (pos2.y + finRadius).
+  
+  let anchorPoint = vec3(pos2.x, pos2.y + finRadius, pos2.z);
+  
+  // Use your flair scale (e.g., 3.0 on Y)
+  scale_around_point(positions, second_idx, anchorPoint, vec3(1.0, 3.0, 1.0));
 
   let endPole = fill_ring_pole(positions, indices, second_idx, colors, vec3(0.0, 0.0, 0.0), true);
 
@@ -817,14 +826,23 @@ function assignLabel(labels, label_idx, labelVal)
   }
 }
 
+// similarly fragile to assignLabel, but assigns pivot values
+function assignPivot(pivots, pivot_idx, pivotVal = {})
+{
+  for (let i = 0; i < pivot_idx.length; ++i)
+  {
+    pivots.push(pivotVal.x, pivotVal.y, pivotVal.z);
+  }
+}
+
 export function goldfish(
-    positions, indices, colors, labels,
+    positions, indices, colors, labels, pivots,
     // body params 
     bodyLength, bodyHeight, bodyWidth, arch,
     // head params
-    headSize, eyeType, mouthTilt,
+    headSize, eyeType, mouthTilt, eyeScale,
     // caudal params
-    caudalLength, caudalWidth, caudalType,
+    caudalLength, caudalWidth, caudalType, caudalCurve,
     // dorsal params
     dorsalLength, dorsalWidth, dorsalShift, dorsalType,
     // pelvic params
@@ -879,26 +897,42 @@ export function goldfish(
     scaleCtrlPoints
   );
   assignLabel(labels, body_idx, 0);
+  assignPivot(pivots, body_idx, getCentroid(positions, body_idx));
 
-  let pectoral_idx = gfish_pectoral(positions, indices, colors, pectoralInfoPacket.l, pectoralLength, pectoralWidth);
-  pectoral_idx.push(...gfish_pectoral(positions, indices, colors, pectoralInfoPacket.r, pectoralLength, pectoralWidth));
-  assignLabel(labels, pectoral_idx, 1);
+  let pectoral_idx = gfish_pectoral(positions, indices, colors, pivots, pectoralInfoPacket.l, pectoralLength, pectoralWidth);
+  assignPivot(pivots, pectoral_idx, pectoralInfoPacket.l.pos);
+
+  let pectoral_idx2 = gfish_pectoral(positions, indices, colors, pivots, pectoralInfoPacket.r, pectoralLength, pectoralWidth);
+  assignPivot(pivots, pectoral_idx, pectoralInfoPacket.r.pos);
+
+  let bothPectoral_idx = [...pectoral_idx, ...pectoral_idx2];
+  assignLabel(labels, bothPectoral_idx, 6);
 
   let pelvic_idx = gfish_pelvic(positions, indices, colors, pelvicInfoPacket.l, pelvicLength, pelvicWidth, true);
-  pelvic_idx.push(...gfish_pelvic(positions, indices, colors, pelvicInfoPacket.r, pelvicLength, pelvicWidth, false));
-  assignLabel(labels, pelvic_idx, 1);
+  assignPivot(pivots, pelvic_idx, pelvicInfoPacket.l.pos);
+
+  let pelvic_idx2 = gfish_pelvic(positions, indices, colors, pelvicInfoPacket.r, pelvicLength, pelvicWidth, false);
+  assignPivot(pivots, pelvic_idx2, pelvicInfoPacket.r.pos);
+  
+  let bothPelvic_idx = [...pelvic_idx, ...pelvic_idx2];
+  assignLabel(labels, bothPelvic_idx, 1);
 
   headSize.x *= 0.1;
   headSize.y *= 0.2;
   // assigns labels to eyes/head within the function
-  gfish_head(positions, indices, colors, labels, head_pos, head_body_size, headSize, eye_types.BUBBLY, mouthTilt);
+  // also assigns pivots for eyes
+  gfish_head(positions, indices, colors, labels, pivots, head_pos, head_body_size, headSize, eyeScale, eye_types.BUBBLY, mouthTilt);
   
-  let caudal_idx = gfish_caudal(positions, indices, colors, caudal_pos, caudalLength, caudalWidth, bodyLength, caudal_types.VBUTT); 
-  assignLabel(labels, caudal_idx, 1);
+  let caudal_idx = gfish_caudal(positions, indices, colors, pivots, caudal_pos, caudalLength, caudalWidth, caudalCurve, bodyLength, caudal_types.VBUTT); 
+  assignLabel(labels, caudal_idx, 7);
+
   let dorsal_idx = gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalShift, posCtrlPoints, scaleCtrlPoints, dorsalType);
-  assignLabel(labels, dorsal_idx, 1);
+  assignLabel(labels, dorsal_idx, 5);
+  assignPivot(pivots, dorsal_idx, getCentroid(positions, dorsal_idx)); // not used currently
+
   let afin_idx = gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType);
-  assignLabel(labels, afin_idx, 1);
+  assignLabel(labels, afin_idx, 5);
+  assignPivot(pivots, afin_idx, getCentroid(positions, afin_idx)); // not used currently
 
   return;
 }

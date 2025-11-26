@@ -32,18 +32,19 @@ function createFishGeometry(gl) {
   const indices = [];
   const colors = [];
   const labels = [];
+  const pivots = [];
 
   goldfish(
-    positions, indices, colors, labels,
+    positions, indices, colors, labels, pivots,
     // body params
     // bodyLength, bodyHeight, bodyWidth, belly_size, arch
     1.35, 0.6, 0.7, 0.0,
     // head params
-    // headSize, eyeType, mouthTilt
-    {x: 0.03, y: 0.06, z: 0.3}, eye_types.GOOGLY, 0.0,
+    // headSize, eyeType, mouthTilt, eyeSize
+    {x: 0.03, y: 0.06, z: 0.3}, eye_types.GOOGLY, 0.0, 1.0,
     // caudal params
-    // caudalLength, caudalWidth, caudalType, caudalAngle
-    0.6, 0.75, caudal_types.DROOPY,
+    // caudalLength, caudalWidth, caudalType, caudalCurve
+    0.6, 0.75, caudal_types.DROOPY, 1.0,
     // dorsal params
     // dorsalLength, dorsalWidth, dorsalShift, dorsalType
     0.4, 0.35, 0.49, dorsal_types.PUNK,
@@ -65,11 +66,13 @@ function createFishGeometry(gl) {
   const vs_Pos_loc = 0;
   const vs_Col_loc = 1;
   const vs_Label_loc = 2;
+  const vs_Pivot_loc = 3;
 
   // Create VBOs and IBO
   const posBuffer = gl.createBuffer();
   const colorBuffer = gl.createBuffer();
   const labelBuffer = gl.createBuffer();
+  const pivotBuffer = gl.createBuffer();
   const ibo = gl.createBuffer();
   
   // Helper to setup/bind buffers initially
@@ -84,10 +87,13 @@ function createFishGeometry(gl) {
   setupBuffer(posBuffer, positions, vs_Pos_loc, 3);
   setupBuffer(colorBuffer, colors, vs_Col_loc, 3);
   
+  // label buffer uses ints, so is treated differently
   gl.bindBuffer(gl.ARRAY_BUFFER, labelBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Int32Array(labels), gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(vs_Label_loc);
   gl.vertexAttribIPointer(vs_Label_loc, 1, gl.INT, 0, 0);
+
+  setupBuffer(pivotBuffer, pivots, vs_Pivot_loc, 3);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
   gl.bufferData(
@@ -101,6 +107,7 @@ function createFishGeometry(gl) {
     posBuffer,
     colorBuffer,
     labelBuffer,
+    pivotBuffer,
     ibo,
     count: indices.length,
     attribs: { vs_Pos : vs_Pos_loc, vs_Col : vs_Col_loc },
@@ -154,15 +161,16 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     const indices = [];
     const colors = [];
     const labels = [];
+    const pivots = [];
 
     console.log(newParams);
 
     // 1. Call the geometry generation function with the new parameters
     goldfish(
-        positions, indices, colors, labels,
+        positions, indices, colors, labels, pivots,
         newParams.bodyLength, newParams.bodyHeight, newParams.bodyWidth, newParams.arch,
-        newParams.headSize, eye_types.GOOGLY, newParams.mouthTilt,
-        newParams.caudalLength, newParams.caudalWidth, caudal_types.DROOPY,
+        newParams.headSize, eye_types.GOOGLY, newParams.mouthTilt, newParams.eyeSize,
+        newParams.caudalLength, newParams.caudalWidth, caudal_types.DROOPY, newParams.caudalCurve,
         newParams.dorsalLength, newParams.dorsalWidth, newParams.dorsalShift, dorsal_types.PUNK,
         newParams.pelvicLength, newParams.pelvicWidth, newParams.pelvicShift, newParams.pelvicAngle,
         newParams.pectoralLength, newParams.pectoralWidth, newParams.pectoralShift, newParams.pectoralAngle,
@@ -184,6 +192,9 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     gl.bindBuffer(gl.ARRAY_BUFFER, gfish.labelBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Int32Array(labels), gl.DYNAMIC_DRAW);
 
+    gl.bindBuffer(gl.ARRAY_BUFFER, gfish.pivotBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pivots), gl.DYNAMIC_DRAW);
+
     // Update Indices IBO
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gfish.ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.DYNAMIC_DRAW);
@@ -204,7 +215,8 @@ export function createGoldfish(gl) {
     const bindings = {
       vs_Pos: 0,
       vs_Col: 1,
-      vs_Label: 2
+      vs_Label: 2,
+      vs_Pivot: 3
     };
 
     const prog = makeProgram(gl, vs, fs, bindings);

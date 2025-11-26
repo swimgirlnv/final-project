@@ -113,8 +113,10 @@ const bodyWidth = document.getElementById("bodyWidth");
 const arch = document.getElementById("arch");
 const headSize = document.getElementById("headSize");
 const mouthTilt = document.getElementById("mouthTilt");
+const eyeSize = document.getElementById("eyeSize");
 const caudalLength = document.getElementById("caudalLength");
 const caudalWidth = document.getElementById("caudalWidth");
+const caudalCurve = document.getElementById("caudalCurve");
 const dorsalLength = document.getElementById("dorsalLength");
 const dorsalWidth = document.getElementById("dorsalWidth");
 const dorsalShift = document.getElementById("dorsalShift");
@@ -152,10 +154,12 @@ function readGoldfishParams() {
         // head params
         headSize: { x: parseFloat(headSize.value), y: parseFloat(headSize.value), z: parseFloat(headSize.value) }, // Assuming headSize slider affects both X and Y equally for now
         mouthTilt: parseFloat(mouthTilt.value),
+        eyeSize: parseFloat(eyeSize.value),
         
         // caudal params
         caudalLength: parseFloat(caudalLength.value),
         caudalWidth: parseFloat(caudalWidth.value),
+        caudalCurve: parseFloat(caudalCurve.value),
         
         // dorsal params
         dorsalLength: parseFloat(dorsalLength.value),
@@ -193,8 +197,8 @@ function initGoldfishUI() {
     // 1. Sliders (Input event fires continuously while dragging)
     const sliders = [
         bodyLength, bodyHeight, bodyWidth, arch,
-        headSize, mouthTilt,
-        caudalLength, caudalWidth,
+        headSize, mouthTilt, eyeSize,
+        caudalLength, caudalWidth, caudalCurve,
         dorsalLength, dorsalWidth, dorsalShift,
         pelvicLength, pelvicWidth, pelvicShift, pelvicAngle,
         pectoralLength, pectoralWidth, pectoralShift, pectoralAngle,
