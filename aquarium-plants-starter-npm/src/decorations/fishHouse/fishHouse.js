@@ -1,4 +1,4 @@
-import { vs, fs } from "./fishHouseShaders";
+import { vs, fs } from "./fishHouseShaders.js";
 import { registerObject, findValidPosition } from "../../sceneCollision.js";
 
 export function createFishHouseLayer(gl) {

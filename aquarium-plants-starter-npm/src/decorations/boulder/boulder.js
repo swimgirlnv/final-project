@@ -1,4 +1,4 @@
-import { vs, fs } from "./boulderShader";
+import { vs, fs } from "./boulderShader.js";
 import { findValidPosition, registerObject } from "../../sceneCollision.js";
 
 export function createBoulderLayer(gl) {

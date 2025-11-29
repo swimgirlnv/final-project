@@ -1,5 +1,5 @@
 // sceneCollision.js - Spatial collision detection for aquarium scene
-import { TANK_X_HALF, TANK_Z_HALF } from "./tank/tankFloor";
+import { TANK_X_HALF, TANK_Z_HALF } from "./tank/tankFloor.js";
 
 export const TANK_BOUNDS = {
   // convenient half-extents for plants / floor

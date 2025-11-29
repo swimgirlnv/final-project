@@ -1,4 +1,4 @@
-import { TANK_X_HALF, TANK_Z_HALF } from "./tankFloor";
+import { TANK_X_HALF, TANK_Z_HALF } from "./tankFloor.js";
 
 export const PLANT_BOUNDS = {
   xHalf: TANK_X_HALF * 0.98,

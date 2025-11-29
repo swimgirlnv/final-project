@@ -1,5 +1,5 @@
 // tankFloor.js
-import { vs, fs } from "./tankFloorShaders";
+import { vs, fs } from "./tankFloorShaders.js";
 
 // Single source of truth for tank size
 export let TANK_X_HALF = 2.6;
