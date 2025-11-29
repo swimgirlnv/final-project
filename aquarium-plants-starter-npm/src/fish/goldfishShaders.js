@@ -86,7 +86,8 @@ void main() {
   else if (vs_Label == 4)
   {
     float scaleVal = ((sin(u_time * 1.7) + 1.0) / 2.0) + 0.35;
-    animatePos = ((vs_Pos - vs_Pivot) * scaleVal) + vs_Pivot;
+    float animateVal = ((vs_Pos.y - vs_Pivot.y) * scaleVal) + vs_Pivot.y;
+    animatePos = vec3(vs_Pos.x, animateVal, vs_Pos.z);
   }
   vec3 wavePos = vec3(animatePos.x + (sin(3.0 * (u_time + animatePos.z)) * 0.04), animatePos.y, animatePos.z);
 

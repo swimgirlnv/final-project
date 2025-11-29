@@ -1,6 +1,21 @@
 import { vs, fs } from "./goldfishShaders.js";
 import { goldfish, eye_types, afin_types, caudal_types, dorsal_types } from "./goldfishGeo.js";
 
+/*
+Stephen Gavin Sears
+Commented 11/28/2025
+goldfish.js uses the functions defined in goldfishGeo.js to create geometry
+for custom fish, then pass information to the GPU for rendering. This file
+contains the functions used in main.js to render fish.
+
+Things to note:
+- Whenever a Map is used to define a three dimensional point, we are assuming
+  an object defined as follows:
+  let examplePoint = {x: <xVal>, y: <yVal>, z: <zVal>};
+  this pattern will generally be used for any three dimensional points in this file 
+  (but notably not in some other files, like splineVec3).
+ */
+
 // functions to prepare data for GPU
 function compile(gl, type, src) {
   const sh = gl.createShader(type);
@@ -41,22 +56,22 @@ function createFishGeometry(gl) {
     1.35, 0.6, 0.7, 0.0,
     // head params
     // headSize, eyeType, mouthTilt, eyeSize
-    {x: 0.03, y: 0.06, z: 0.3}, eye_types.GOOGLY, 0.0, 1.0,
+    {x: 0.4, y: 0.4, z: 0.4}, eye_types.GOOGLY, 0.0, 1.0,
     // caudal params
     // caudalLength, caudalWidth, caudalType, caudalCurve
-    0.6, 0.75, caudal_types.DROOPY, 1.0,
+    0.75, 0.8, caudal_types.DROOPY, 1.0,
     // dorsal params
     // dorsalLength, dorsalWidth, dorsalShift, dorsalType
     0.4, 0.35, 0.49, dorsal_types.PUNK,
     // pelvic params
     // pelvicLength, pelvicWidth, pelvicShift, pelvicAngle
-    0.5, 1.0, 0.55, -0.5,
+    0.45, 1.0, 0.55, -0.5,
     // pectoral params
     // pectoralLength, pectoralWidth, pectoralShift, pectoralAngle
-    0.5, 1.05, 0.25, -0.35,
+    0.38, 1.05, 0.2, -0.35,
     // afin params
     // afinLength, afinWidth, afinType, afinShift
-    0.2, 0.21, afin_types.SPIKY, 0.68
+    0.2, 0.1, afin_types.SPIKY, 0.68
   );
 
   const vao = gl.createVertexArray();
@@ -120,14 +135,16 @@ function createFishGeometry(gl) {
       arch: 0.0, // Mapped from the 4th argument (0.0)
       
       // Head
-      headSize: {x: 0.03, y: 0.06, z: 0.3}, 
+      headSize: {x: 0.4, y: 0.4, z: 0.4}, 
       eyeType: eye_types.GOOGLY, 
       mouthTilt: 0.0,
+      eyeSize: 1.0,
       
       // Caudal (Tail)
-      caudalLength: 0.6, 
-      caudalWidth: 0.75, 
+      caudalLength: 0.75, 
+      caudalWidth: 0.8, 
       caudalType: caudal_types.DROOPY,
+      caudalCurve: 1.0,
       
       // Dorsal
       dorsalLength: 0.4, 
@@ -136,20 +153,20 @@ function createFishGeometry(gl) {
       dorsalType: dorsal_types.PUNK,
       
       // Pelvic
-      pelvicLength: 0.5, 
+      pelvicLength: 0.45, 
       pelvicWidth: 1.0, 
       pelvicShift: 0.55, 
       pelvicAngle: -0.5,
       
       // Pectoral
-      pectoralLength: 0.5, 
+      pectoralLength: 0.38, 
       pectoralWidth: 1.05, 
-      pectoralShift: 0.25, 
+      pectoralShift: 0.2, 
       pectoralAngle: -0.35,
       
       // Afin (Anal Fin)
       afinLength: 0.2, 
-      afinWidth: 0.21, 
+      afinWidth: 0.1, 
       afinType: afin_types.SPIKY, 
       afinShift: 0.68
     }

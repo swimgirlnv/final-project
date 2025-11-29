@@ -1,9 +1,22 @@
-// helper "vec3" functions
+/*
+Stephen Gavin Sears
+Commented 11/28/2025
+Boilerplate linear algebra functions used in generating geometry for fish
 
+Things to note:
+- Whenever a Map is used to define a three dimensional point, we are assuming
+  an object defined as follows:
+  let examplePoint = {x: <xVal>, y: <yVal>, z: <zVal>};
+  this pattern will generally be used for any three dimensional points in this file 
+  (but notably not in some other files, like splineVec3).
+ */
+
+// "constructor" for vec object to save time
 export function vec3(x, y, z) {
   return {x: x, y: y, z: z};
 }
 
+// Euclidean distance
 export function length(vecObj = {}) 
 {
   if (vecObj.x == null || vecObj.y == null || vecObj.z == null) {
@@ -36,7 +49,7 @@ export function cross(a, b) {
 }
 
 // vector subtract
-export function sub(a, b) {
+export function subVec(a, b) {
   return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
 }
 export function addVec(a, b) { 
