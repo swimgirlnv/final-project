@@ -1,4 +1,4 @@
-import { vs, fs } from "./grassShaders";
+import { vs, fs } from "./grassShaders.js";
 import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
