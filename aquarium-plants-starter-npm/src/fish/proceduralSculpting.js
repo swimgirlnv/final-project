@@ -1,4 +1,4 @@
-import { CatmullRomSpline3D } from "./splineVec3.js";
+import { CatmullRomSpline3D } from "./SplineVec3.js";
 import { addVec, scaleVec } from "./linearTools.js";
 /*
 Stephen Gavin Sears

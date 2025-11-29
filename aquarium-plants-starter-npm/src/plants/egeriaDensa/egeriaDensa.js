@@ -1,14 +1,32 @@
 // Egeria densa as a layer: expose {draw, regenerate, set*}
 
 import { vs, fs } from "./egeriaDensaShaders.js";
+import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
+import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
-const TANK = { xHalf: 1.6, zHalf: 1.2 }; // world half-extents in X/Z
 const CLUMP = {
   cell: 0.6, // grid cell size -> spacing between possible clumps
   radius: 0.18, // how wide a clump spreads
   noiseScale: 0.9, // fbm frequency for clump presence
   threshold: 0.58, // higher = sparser clumps
 };
+
+const STEM_SLICES = 4;
+
+const TANK = {
+  xHalf: TANK_X_HALF ?? 1.6,
+  zHalf: TANK_Z_HALF ?? 1.2,
+};
+
+// simple rectangle check that exactly matches our floor extents
+function insideTankRect(x, z, margin = 0.0) {
+  // uses the same rectangle as the sand floor
+  const xmin = -TANK_X_HALF + margin;
+  const xmax =  TANK_X_HALF - margin;
+  const zmin = -TANK_Z_HALF + margin;
+  const zmax =  TANK_Z_HALF - margin;
+  return x >= xmin && x <= xmax && z >= zmin && z <= zmax;
+}
 
 // ------- FBM noise helpers
 function fract(x) {
@@ -145,14 +163,30 @@ function makeInstBufs(gl, attribs, maxCount) {
   };
 }
 
-// tiny parametric L-system utilities
 function pushStem(inst, base, y0, len, hue) {
-  inst.originXZ.push(base[0], base[1]);
-  inst.originYLen.push(y0, len);
-  inst.phiTilt.push(0, 1);
-  inst.curveWidth.push(0.015, 0.006);
-  inst.hueKind.push(hue, 1.0); // stem
-  inst.count++;
+  for (let s = 0; s < STEM_SLICES; s++) {
+    // angle around the stem’s vertical axis for this slice
+    const phi = (s / STEM_SLICES) * (2 * Math.PI);
+
+    inst.originXZ.push(base[0], base[1]);
+    inst.originYLen.push(y0, len);
+
+    // phi = slice orientation; tilt = 1 so tangent ≈ up
+    inst.phiTilt.push(phi, 1.0);
+
+    // (curvature, base width) – width is the stem radius
+    inst.curveWidth.push(0.0, 0.01);
+
+    // hue, kind=1.0 → stem
+    inst.hueKind.push(hue, 1.0);
+
+    inst.count++;
+
+    // safety: don't overflow the instance buffer
+    if (inst.count >= EGERIA_MAX_INSTANCES) {
+      return;
+    }
+  }
 }
 
 function pushWhorl(inst, base, y, k, startPhi, hue, scale = 1.0) {
@@ -171,6 +205,8 @@ function pushWhorl(inst, base, y, k, startPhi, hue, scale = 1.0) {
   }
 }
 
+const EGERIA_MAX_INSTANCES = 60000;
+
 export function createEgeriaLayer(gl) {
   const bindings = {
     a_pos: 0,
@@ -185,7 +221,7 @@ export function createEgeriaLayer(gl) {
   const prog = makeProgram(gl, vs, fs, bindings);
   const ribbon = createRibbon(gl, 28);
   gl.bindVertexArray(ribbon.vao); // ensure instanced attribs attach to this VAO
-  const inst = makeInstBufs(gl, ribbon.attribs, 20000);
+  const inst = makeInstBufs(gl, ribbon.attribs, EGERIA_MAX_INSTANCES);
 
   // uniforms
   const U = (n) => gl.getUniformLocation(prog, n);
@@ -204,128 +240,167 @@ export function createEgeriaLayer(gl) {
   const u_fogFar = U("u_fogFar");
 
   const state = {
-    stems: 120,
+    stems: 360,
     nodes: 12,
     branchChance: 0.05,
     leafWidthScale: 0.85,
   };
 
   function regenerate() {
-    const data = {
-      originXZ: [],
-      originYLen: [],
-      phiTilt: [],
-      curveWidth: [],
-      hueKind: [],
-      count: 0,
-    };
+  const data = {
+    originXZ: [],
+    originYLen: [],
+    phiTilt: [],
+    curveWidth: [],
+    hueKind: [],
+    count: 0,
+  };
 
-    const seed = Math.random() * 1000.0;
+  const seed = Math.random() * 1000.0;
+  const stemRadius = 0.04; // footprint used for both clumps and singles
 
-    // Build a coarse grid of potential clump centers
-    const nx = Math.max(1, Math.floor((2 * TANK.xHalf) / CLUMP.cell));
-    const nz = Math.max(1, Math.floor((2 * TANK.zHalf) / CLUMP.cell));
-    const dx = (2 * TANK.xHalf) / nx;
-    const dz = (2 * TANK.zHalf) / nz;
+  const HALF_X = TANK_X_HALF;
+  const HALF_Z = TANK_Z_HALF;
 
-    let planted = 0;
+  // Build a coarse grid of potential clump centers
+  const nx = Math.max(1, Math.floor((2 * HALF_X) / CLUMP.cell));
+  const nz = Math.max(1, Math.floor((2 * HALF_Z) / CLUMP.cell));
+  const dx = (2 * HALF_X) / nx;
+  const dz = (2 * HALF_Z) / nz;
 
-    for (let gx = 0; gx < nx && planted < state.stems; gx++) {
-      for (let gz = 0; gz < nz && planted < state.stems; gz++) {
-        // cell center
-        const cx = -TANK.xHalf + (gx + 0.5) * dx;
-        const cz = -TANK.zHalf + (gz + 0.5) * dz;
+  let planted = 0;
 
-        // FBM decides if this cell contains a clump
-        const n = fbm2(
-          (cx + seed) * CLUMP.noiseScale,
-          (cz - seed) * CLUMP.noiseScale,
-          4
+  // ----- CLUMPED STEMS ----------------------------------------------------
+  for (let gx = 0; gx < nx && planted < state.stems; gx++) {
+    for (let gz = 0; gz < nz && planted < state.stems; gz++) {
+      // cell center in world-space
+      const cx = -HALF_X + (gx + 0.5) * dx;
+      const cz = -HALF_Z + (gz + 0.5) * dz;
+
+      // FBM decides if this cell contains a clump
+      const n = fbm2(
+        (cx + seed) * CLUMP.noiseScale,
+        (cz - seed) * CLUMP.noiseScale,
+        4
+      );
+      if (n < CLUMP.threshold) continue; // empty cell = space between clumps
+
+      // group size 1–5 (clamped to remaining stems)
+      const group = Math.min(
+        1 + Math.floor(rand(0, 5)),
+        state.stems - planted
+      );
+
+      for (let k = 0; k < group && planted < state.stems; k++) {
+        // random offset in a small disk around center
+        const ang = rand(0, 2 * Math.PI);
+        const r = rand(0.0, CLUMP.radius);
+        const bx = cx + r * Math.cos(ang);
+        const bz = cz + r * Math.sin(ang);
+
+        // respect tank shape + collisions
+        if (!insideTankRect(bx, bz, stemRadius)) continue;
+        if (checkCollision2D(bx, bz, stemRadius, 0.0)) continue;
+
+        // Per-plant hue & height from noise
+        const hue = rand(0.28, 0.36);
+        const hn = fbm2(
+          (bx + seed * 1.7) * 0.9,
+          (bz - seed * 0.9) * 0.9,
+          3
         );
-        if (n < CLUMP.threshold) continue; // empty cell = spacing between clumps
+        const heightScale = 0.7 + 0.6 * hn; // 0.70 .. 1.30
+        const nodes = Math.max(6, Math.round(state.nodes * heightScale));
 
-        // Clump size 1–5 (capped by remaining stems)
-        const group = Math.min(
-          1 + Math.floor(rand(0, 5)),
-          state.stems - planted
-        );
+        // --- BUILD ONE CONTINUOUS MAIN STEM + WHORLS ----------------------
+        let y = 0.0;
+        let twist = rand(0, 2 * Math.PI);
+        let maxY = 0.0;
 
-        for (let k = 0; k < group && planted < state.stems; k++) {
-          // random offset in a small disk around center
-          const ang = rand(0, 2 * Math.PI);
-          const r = rand(0.0, CLUMP.radius);
-          const base = [cx + r * Math.cos(ang), cz + r * Math.sin(ang)];
+        for (let i = 0; i < nodes; i++) {
+          const seg =
+            (0.1 + 0.02 * Math.max(0.0, 1.0 - i / nodes)) * heightScale;
 
-          // Per-plant hue & height from noise
-          const hue = rand(0.28, 0.36);
-          const hn = fbm2(
-            (base[0] + seed * 1.7) * 0.9,
-            (base[1] - seed * 0.9) * 0.9,
-            3
-          );
-          const heightScale = 0.7 + 0.6 * hn; // 0.70 .. 1.30
-          const nodes = Math.max(6, Math.round(state.nodes * heightScale));
+          // move up along the central axis
+          y += seg;
+          maxY = y;
 
-          let y = 0.0,
-            twist = rand(0, 2 * Math.PI);
-          for (let i = 0; i < nodes; i++) {
-            const seg =
-              (0.1 + 0.02 * Math.max(0, 1.0 - i / nodes)) * heightScale;
-            pushStem(data, base, y, seg, hue);
-            y += seg;
+          // whorl of leaves at this node
+          const leaves = Math.floor(rand(3, 5.999)); // 3–5 thin leaves per whorl
+          pushWhorl(data, [bx, bz], y, leaves, twist, hue, 1.0);
+          twist += 0.42;
 
-            const leaves = Math.floor(rand(3, 5.999)); // 3–5 thin leaves per whorl
-            pushWhorl(data, base, y, leaves, twist, hue, 1.0);
-            twist += 0.42;
-
-            // Rare/short side shoots; a bit more common in taller (high-noise) plants
-            const bChance = state.branchChance * 0.5 * (0.5 + hn); // generally lower than before
-            if (i > 2 && i < nodes - 2 && Math.random() < bChance) {
-              let y2 = y - rand(0.04, 0.1),
-                tw2 = twist + rand(-0.35, 0.35);
-              const sideN = Math.max(2, Math.floor(nodes * 0.25));
-              for (let j = 0; j < sideN; j++) {
-                const d =
-                  (0.08 + 0.015 * Math.max(0, 1 - j / sideN)) *
-                  0.85 *
-                  heightScale;
-                pushStem(data, base, y2, d, hue);
-                y2 += d;
-                const kLeaves = Math.floor(rand(3, 4.999));
-                pushWhorl(data, base, y2, kLeaves, tw2, hue, 0.65);
-                tw2 += 0.4;
-              }
+          // Rare/short side shoots; a bit more common in taller (high-noise) plants
+          const bChance = state.branchChance * 0.5 * (0.5 + hn);
+          if (i > 2 && i < nodes - 2 && Math.random() < bChance) {
+            let y2 = y - rand(0.04, 0.1);
+            let tw2 = twist + rand(-0.35, 0.35);
+            const sideN = Math.max(2, Math.floor(nodes * 0.25));
+            for (let j = 0; j < sideN; j++) {
+              const d =
+                (0.08 + 0.015 * Math.max(0.0, 1.0 - j / sideN)) *
+                0.85 *
+                heightScale;
+              // side branch stem segment
+              pushStem(data, [bx, bz], y2, d, hue);
+              y2 += d;
+              const kLeaves = Math.floor(rand(3, 4.999));
+              pushWhorl(data, [bx, bz], y2, kLeaves, tw2, hue, 0.65);
+              tw2 += 0.4;
             }
           }
-
-          planted++;
         }
+
+        // *** one continuous main trunk from base to top ***
+        if (maxY > 0.0) {
+          pushStem(data, [bx, bz], 0.0, maxY, hue);
+        }
+
+        planted++;
       }
     }
-
-    // If we under-filled (super sparse threshold), sprinkle a few singles
-    while (planted < state.stems) {
-      const x = rand(-TANK.xHalf, TANK.xHalf);
-      const z = rand(-TANK.zHalf, TANK.zHalf);
-      const hue = rand(0.28, 0.36);
-      const hn = fbm2((x + seed * 1.7) * 0.9, (z - seed * 0.9) * 0.9, 3);
-      const heightScale = 0.7 + 0.6 * hn;
-      const nodes = Math.max(6, Math.round(state.nodes * heightScale));
-      let y = 0.0,
-        twist = rand(0, 2 * Math.PI);
-      for (let i = 0; i < nodes; i++) {
-        const seg = (0.1 + 0.02 * Math.max(0, 1.0 - i / nodes)) * heightScale;
-        pushStem(data, [x, z], y, seg, hue);
-        y += seg;
-        const leaves = Math.floor(rand(3, 5.999));
-        pushWhorl(data, [x, z], y, leaves, twist, hue, 1.0);
-        twist += 0.42;
-      }
-      planted++;
-    }
-
-    inst.update(gl, data);
   }
+
+  // ----- FALLBACK SINGLES (for very sparse noise) ------------------------
+  while (planted < state.stems) {
+    const bx = rand(-HALF_X, HALF_X);
+    const bz = rand(-HALF_Z, HALF_Z);
+
+    if (!insideTankRect(bx, bz, stemRadius)) continue;
+    if (checkCollision2D(bx, bz, stemRadius, 0.0)) continue;
+
+    const hue = rand(0.28, 0.36);
+    const hn = fbm2(
+      (bx + seed * 1.7) * 0.9,
+      (bz - seed * 0.9) * 0.9,
+      3
+    );
+    const heightScale = 0.7 + 0.6 * hn;
+    const nodes = Math.max(6, Math.round(state.nodes * heightScale));
+
+    let y = 0.0;
+    let twist = rand(0, 2 * Math.PI);
+    let maxY = 0.0;
+
+    for (let i = 0; i < nodes; i++) {
+      const seg = (0.1 + 0.02 * Math.max(0.0, 1.0 - i / nodes)) * heightScale;
+      y += seg;
+      maxY = y;
+
+      const leaves = Math.floor(rand(3, 5.999));
+      pushWhorl(data, [bx, bz], y, leaves, twist, hue, 1.0);
+      twist += 0.42;
+    }
+
+    if (maxY > 0.0) {
+      pushStem(data, [bx, bz], 0.0, maxY, hue);
+    }
+
+    planted++;
+  }
+
+  inst.update(gl, data);
+}
   regenerate();
 
   return {
