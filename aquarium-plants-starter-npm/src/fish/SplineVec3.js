@@ -1,5 +1,13 @@
 /**
+ * Stephen Gavin Sears
+ * Commented 11/28/2025
  * CatmullRomSpline3D: Generates smooth 3D curves passing through a list of control points.
+ * I should note that AI was used pretty liberally to construct this class,
+ * since making splines is such a well-known problem. 
+ * This variety of spline uses the Catmull-Rom method, but makes sure it's C1 continuous 
+ * by using a Hermite interpolation formula. That way we can get the slope without having 
+ * to explicity calculate and interpolate with control points, but as a result we have
+ * no ability to edit the control points.
  */
 export class CatmullRomSpline3D {
     /**

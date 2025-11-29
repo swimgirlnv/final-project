@@ -1,6 +1,21 @@
 import { vs, fs } from "./goldfishShaders.js";
 import { goldfish, eye_types, afin_types, caudal_types, dorsal_types } from "./goldfishGeo.js";
 
+/*
+Stephen Gavin Sears
+Commented 11/28/2025
+goldfish.js uses the functions defined in goldfishGeo.js to create geometry
+for custom fish, then pass information to the GPU for rendering. This file
+contains the functions used in main.js to render fish.
+
+Things to note:
+- Whenever a Map is used to define a three dimensional point, we are assuming
+  an object defined as follows:
+  let examplePoint = {x: <xVal>, y: <yVal>, z: <zVal>};
+  this pattern will generally be used for any three dimensional points in this file 
+  (but notably not in some other files, like splineVec3).
+ */
+
 // functions to prepare data for GPU
 function compile(gl, type, src) {
   const sh = gl.createShader(type);
@@ -31,30 +46,32 @@ function createFishGeometry(gl) {
   const positions = [];
   const indices = [];
   const colors = [];
+  const labels = [];
+  const pivots = [];
 
   goldfish(
-    positions, indices, colors,
+    positions, indices, colors, labels, pivots,
     // body params
     // bodyLength, bodyHeight, bodyWidth, belly_size, arch
     1.35, 0.6, 0.7, 0.0,
     // head params
-    // headSize, eyeType, mouthTilt
-    {x: 0.03, y: 0.06, z: 0.3}, eye_types.GOOGLY, 0.0,
+    // headSize, eyeType, mouthTilt, eyeSize
+    {x: 0.4, y: 0.4, z: 0.4}, eye_types.GOOGLY, 0.0, 1.0,
     // caudal params
-    // caudalLength, caudalWidth, caudalType, caudalAngle
-    0.6, 0.75, caudal_types.DROOPY,
+    // caudalLength, caudalWidth, caudalType, caudalCurve
+    0.75, 0.8, caudal_types.DROOPY, 1.0,
     // dorsal params
     // dorsalLength, dorsalWidth, dorsalShift, dorsalType
     0.4, 0.35, 0.49, dorsal_types.PUNK,
     // pelvic params
     // pelvicLength, pelvicWidth, pelvicShift, pelvicAngle
-    0.5, 1.0, 0.55, -0.5,
+    0.45, 1.0, 0.55, -0.5,
     // pectoral params
     // pectoralLength, pectoralWidth, pectoralShift, pectoralAngle
-    0.5, 1.05, 0.25, -0.35,
+    0.38, 1.05, 0.2, -0.35,
     // afin params
     // afinLength, afinWidth, afinType, afinShift
-    0.2, 0.21, afin_types.SPIKY, 0.68
+    0.2, 0.1, afin_types.SPIKY, 0.68
   );
 
   const vao = gl.createVertexArray();
@@ -63,10 +80,14 @@ function createFishGeometry(gl) {
   // Attribute locations (hard-coded to match shader order)
   const vs_Pos_loc = 0;
   const vs_Col_loc = 1;
+  const vs_Label_loc = 2;
+  const vs_Pivot_loc = 3;
 
   // Create VBOs and IBO
   const posBuffer = gl.createBuffer();
   const colorBuffer = gl.createBuffer();
+  const labelBuffer = gl.createBuffer();
+  const pivotBuffer = gl.createBuffer();
   const ibo = gl.createBuffer();
   
   // Helper to setup/bind buffers initially
@@ -80,6 +101,14 @@ function createFishGeometry(gl) {
   gl.bindVertexArray(vao);
   setupBuffer(posBuffer, positions, vs_Pos_loc, 3);
   setupBuffer(colorBuffer, colors, vs_Col_loc, 3);
+  
+  // label buffer uses ints, so is treated differently
+  gl.bindBuffer(gl.ARRAY_BUFFER, labelBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Int32Array(labels), gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(vs_Label_loc);
+  gl.vertexAttribIPointer(vs_Label_loc, 1, gl.INT, 0, 0);
+
+  setupBuffer(pivotBuffer, pivots, vs_Pivot_loc, 3);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
   gl.bufferData(
@@ -92,6 +121,8 @@ function createFishGeometry(gl) {
     vao,
     posBuffer,
     colorBuffer,
+    labelBuffer,
+    pivotBuffer,
     ibo,
     count: indices.length,
     attribs: { vs_Pos : vs_Pos_loc, vs_Col : vs_Col_loc },
@@ -104,14 +135,16 @@ function createFishGeometry(gl) {
       arch: 0.0, // Mapped from the 4th argument (0.0)
       
       // Head
-      headSize: {x: 0.03, y: 0.06, z: 0.3}, 
+      headSize: {x: 0.4, y: 0.4, z: 0.4}, 
       eyeType: eye_types.GOOGLY, 
       mouthTilt: 0.0,
+      eyeSize: 1.0,
       
       // Caudal (Tail)
-      caudalLength: 0.6, 
-      caudalWidth: 0.75, 
+      caudalLength: 0.75, 
+      caudalWidth: 0.8, 
       caudalType: caudal_types.DROOPY,
+      caudalCurve: 1.0,
       
       // Dorsal
       dorsalLength: 0.4, 
@@ -120,20 +153,20 @@ function createFishGeometry(gl) {
       dorsalType: dorsal_types.PUNK,
       
       // Pelvic
-      pelvicLength: 0.5, 
+      pelvicLength: 0.45, 
       pelvicWidth: 1.0, 
       pelvicShift: 0.55, 
       pelvicAngle: -0.5,
       
       // Pectoral
-      pectoralLength: 0.5, 
+      pectoralLength: 0.38, 
       pectoralWidth: 1.05, 
-      pectoralShift: 0.25, 
+      pectoralShift: 0.2, 
       pectoralAngle: -0.35,
       
       // Afin (Anal Fin)
       afinLength: 0.2, 
-      afinWidth: 0.21, 
+      afinWidth: 0.1, 
       afinType: afin_types.SPIKY, 
       afinShift: 0.68
     }
@@ -144,15 +177,17 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     const positions = [];
     const indices = [];
     const colors = [];
+    const labels = [];
+    const pivots = [];
 
     console.log(newParams);
 
     // 1. Call the geometry generation function with the new parameters
     goldfish(
-        positions, indices, colors,
+        positions, indices, colors, labels, pivots,
         newParams.bodyLength, newParams.bodyHeight, newParams.bodyWidth, newParams.arch,
-        newParams.headSize, eye_types.GOOGLY, newParams.mouthTilt,
-        newParams.caudalLength, newParams.caudalWidth, caudal_types.DROOPY,
+        newParams.headSize, eye_types.GOOGLY, newParams.mouthTilt, newParams.eyeSize,
+        newParams.caudalLength, newParams.caudalWidth, caudal_types.DROOPY, newParams.caudalCurve,
         newParams.dorsalLength, newParams.dorsalWidth, newParams.dorsalShift, dorsal_types.PUNK,
         newParams.pelvicLength, newParams.pelvicWidth, newParams.pelvicShift, newParams.pelvicAngle,
         newParams.pectoralLength, newParams.pectoralWidth, newParams.pectoralShift, newParams.pectoralAngle,
@@ -170,6 +205,12 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     // Update Colors VBO
     gl.bindBuffer(gl.ARRAY_BUFFER, gfish.colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.DYNAMIC_DRAW);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gfish.labelBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Int32Array(labels), gl.DYNAMIC_DRAW);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gfish.pivotBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pivots), gl.DYNAMIC_DRAW);
 
     // Update Indices IBO
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gfish.ibo);
@@ -190,7 +231,9 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
 export function createGoldfish(gl) {
     const bindings = {
       vs_Pos: 0,
-      vs_Col: 1
+      vs_Col: 1,
+      vs_Label: 2,
+      vs_Pivot: 3
     };
 
     const prog = makeProgram(gl, vs, fs, bindings);

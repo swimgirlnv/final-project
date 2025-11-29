@@ -1,13 +1,10 @@
 import { 
     getPos,
     getRingData,
-    create_subdiv_box, 
     create_ring, 
     extrude_ring, 
     fill_ring_pole, 
-    fill_ring_fan, 
     scale_around_point, 
-    apply_rotation, 
     rotate_around_point, 
     translate, 
     create_ring_spline, 
@@ -16,15 +13,79 @@ import {
     bend
 } from "./proceduralSculpting.js";
 import {
-    length,
     normalize,
     cross,
-    sub,
+    subVec,
     addVec,
     scaleVec,
     apply_matrix_transform,
     vec3
 } from "./linearTools.js";
+import { CatmullRomSpline3D } from "./SplineVec3.js";
+/*
+Stephen Gavin Sears
+Commented 11/28/2025
+This file contains functions used to generate the various parts of
+the fish in this project procedurally.
+
+Things to note:
+- Whenever a Map is used to define a three dimensional point, we are assuming
+  an object defined as follows:
+  let examplePoint = {x: <xVal>, y: <yVal>, z: <zVal>};
+  this pattern will generally be used for any three dimensional points in this file 
+  (but notably not in some other files, like splineVec3).
+- Most functions will take in parameters such as 
+  positions, indices, colors, labels, that have values pushed to them. These are arrays
+  that we pass into the array buffer with information about the geometry.
+ */
+
+// GOLDFISH BODY PART FUNCTIONS -------------------------------------------------------
+
+/**
+ * Generates geometry for fish body, and also calculates values to be used in generating other
+ * fish body parts (variables labelled with "_out")
+ * 
+ * template for "infoPacket" arguments, which should be passed in empty to be populated with data:
+ * let infoPacketEx =
+ * {
+ *   l: {
+ *     pos: {x: 0.0, y: 0.0, z: 0.0}, 
+ *     norm: {x: 0.0, y: 1.0, z: 0.0}, 
+ *     tangent: {x: 0.0, y: 1.0, z: 0.0}
+ *   },
+ *   r: {
+ *     pos: {x: 0.0, y: 0.0, z: 0.0}, 
+ *     norm: {x: 0.0, y: 1.0, z: 0.0}, 
+ *     tangent: {x: 0.0, y: 1.0, z: 0.0}
+ *   }
+ * }
+ * @param {Array<Number>} positions - Array containing position data for vertices
+ * @param {Array<Number} indices - Array containing index data for vertices
+ * @param {Array<Number} colors - Array containing color data for vertices (used for debugging)
+ * @param {Number} bodyLength - Value that affects the length of the body
+ * @param {Number} bodyHeight - Value that affects the height of the body
+ * @param {Number} bodyWidth - Value that affects the width of the body
+ * @param {Number} arch - Value that creates an arch in the back of the fish
+ * @param {Map<Map<Map<Number>>>} pectoralInfoPacket_out - "infoPacket" item which passes data for pectoral fins
+ * @param {Number} pectoralShift - position pectoral fins have relative to the center of the body
+ * @param {Number} pectoralAngle - angle that pectoral fins have relative to the center of the body
+ * @param {Map<Map<Map<Number>>>} pelvicInfoPacket_out - "infoPacket" item which passes data for pelvic fins
+ * @param {Number} pelvicShift - position pelvic fins have along the fish's body
+ * @param {Number} pelvicAngle - angle that the pelvic fins have relative to the center of the body
+ * @param {Map<Number>} caudalPos_out - calculated position of caudal fin using body spline
+ * @param {Map<Number>} headPos_out - calculated position of head using body spline
+ * @param {Map<Number>} headBodySize_out - Value calculated of scale at neck to create smooth transition between head and body 
+ * @param {Array<Array<Number>>} posCtrlPoints_out - splineVec3 control points passed by reference to use later for body pos
+ * @param {Array<Array<Number>>} scaleCtrlPoints_out - splineVec3 control points passed by reference to use later for body scale
+ * @returns {Array<Number>} all_idx - Array of unique new geometry indices created by this function
+ */
+function gfish_body(
+    positions, indices, colors, 
+    bodyLength, bodyHeight, bodyWidth, arch, 
+    pectoralInfoPacket_out, pectoralShift, pectoralAngle,
+    pelvicInfoPacket_out, pelvicShift, pelvicAngle,
+    caudalPos_out, 
+    headPos_out, headBodySize_out,
 import { CatmullRomSpline3D } from "./SplineVec3.js";
 
 // ---------- GOLDFISH BODY PART GENERATORS. PASS POS/IDX ARRAYS BY REFERENCE FOR UPDATE
@@ -38,18 +99,18 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
 ) {
   const posCtrlPoints = 
   [  // position spline
-    [0.0, 1.0 - arch, 0.0],
-    [0.0, 1.02 - (arch * 0.5), bodyLength * 0.4],
-    [0.0, 1.03, bodyLength * 0.7],
-    [0.0, 1.035, bodyLength]
+    [0.0, 0.0 - arch, 0.0],
+    [0.0, 0.02 - (arch * 0.5), bodyLength * 0.4],
+    [0.0, 0.03, bodyLength * 0.7],
+    [0.0, 0.035, bodyLength]
   ];
   posCtrlPoints_out.push(...posCtrlPoints);
   const scaleCtrlPoints = 
   [  // scale spline
-    [width * 0.3, height * 0.5, 1.0],
-    [width * 0.45, height, 1.0],
-    [width * 0.35, height * 0.52, 1.0],
-    [width * 0.2, height * 0.25, 1.0]
+    [bodyWidth * 0.3, bodyHeight * 0.5, 1.0],
+    [bodyWidth * 0.45, bodyHeight, 1.0],
+    [bodyWidth * 0.35, bodyHeight * 0.52, 1.0],
+    [bodyWidth * 0.2, bodyHeight * 0.25, 1.0]
   ];
   scaleCtrlPoints_out.push(...scaleCtrlPoints);
 
@@ -65,19 +126,22 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
     {x: 0.0, y: 0.0, z: -0.025}  //begin pole offset
   );
 
-  caudal_pos.x = 0.0;
-  caudal_pos.y = 1.035;
-  caudal_pos.z = bodyLength;
+  // recording caudal and head pos to use outside of function
+  // NOTE: this is why we assign values. If we assigned new object,
+  // connection would be broken and value would be NaN outside of func
+  caudalPos_out.x = 0.0;
+  caudalPos_out.y = 0.035;
+  caudalPos_out.z = bodyLength;
 
-  head_pos.x = 0.0;
-  head_pos.y = 1.0 - arch;
-  head_pos.z = 0.0;
+  headPos_out.x = 0.0;
+  headPos_out.y = -arch;
+  headPos_out.z = 0.0;
 
+  // re-defining splines to sample points
   const posPath = new CatmullRomSpline3D(
     posCtrlPoints,
     0.5
   );
-
   const scalePath = new CatmullRomSpline3D(
     scaleCtrlPoints,
     0.5
@@ -85,10 +149,11 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
 
   // take scale for head start
   let neck_scale = scalePath.getPoint(0.0);
-  head_body_size.x = neck_scale[0];
-  head_body_size.y = neck_scale[1];
-  head_body_size.z = neck_scale[2];
+  headBodySize_out.x = neck_scale[0];
+  headBodySize_out.y = neck_scale[1];
+  headBodySize_out.z = neck_scale[2];
 
+  // function that collects necessary info to place fin geometry
   function getDoubleFinInfo(finInfoPacket, shift, angle) {
     let finPos = posPath.getPoint(shift);
     let spinePos = { x: finPos[0], y: finPos[1], z: finPos[2] };
@@ -97,7 +162,7 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
     let nextShift = Math.min(shift + 0.01, 1.0);
     let nextPosArr = posPath.getPoint(nextShift);
     let nextPosVec = {x: nextPosArr[0], y: nextPosArr[1], z: nextPosArr[2]};
-    let spineTangent = normalize(sub(nextPosVec, spinePos));
+    let spineTangent = normalize(subVec(nextPosVec, spinePos));
 
     let offset = 
     {
@@ -111,7 +176,7 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
         y: finPos[1] + offset.y * 0.9,
         z: finPos[2]
     };
-    const normL = normalize(sub(lPos, spinePos));
+    const normL = normalize(subVec(lPos, spinePos));
 
     finInfoPacket.l.pos = lPos;
     finInfoPacket.l.norm = normL;
@@ -122,63 +187,67 @@ function gfish_body(positions, indices, colors, bodyLength, height, width, arch,
         y: finPos[1] + offset.y * 0.9,
         z: finPos[2]
     };
-    const normR = normalize(sub(rPos, spinePos));
+    const normR = normalize(subVec(rPos, spinePos));
 
     finInfoPacket.r.pos = rPos;
     finInfoPacket.r.norm = normR;
     finInfoPacket.r.tangent = spineTangent;
-    return;
   }
   
-  getDoubleFinInfo(pectoralInfoPacket, pectoralShift, pectoralAngle);
-  getDoubleFinInfo(pelvicInfoPacket, pelvicShift, pelvicAngle);
+  getDoubleFinInfo(pectoralInfoPacket_out, pectoralShift, pectoralAngle);
+  getDoubleFinInfo(pelvicInfoPacket_out, pelvicShift, pelvicAngle);
 
-  let pelvPos = posPath.getPoint(pelvicShift);
-  let pelvScale = scalePath.getPoint(pelvicShift);
-
-  // set positions of fins using input angle
-
-  // dorsal_pos;
-  // dorsalShift
-
-  // afin_pos; 
-
-  // pectoral_pos = {r: {}, l: {}}; 
-  // pectoralShift;
-
-  // pelvic_pos = {r: {}, l: {}}; 
-  // pelvicShift; 
-
-  
   return all_idx;
 }
 
-function fill_ring_mouth(positions, indices, colors, orig_ring_indices, mouthStickOut, topLipSize, topLipOffset, botLipSize, botLipOffset) {
+/**
+ * Fills ring of vertices with a mouth structure, which is created with two filled rings of 
+ * verts as the lips, with a gap in between as the mouth.
+ * Note that in order for this structure to be possible, we need an even number of vertices in the
+ * loop. Without this, we cannot create a line running across the loop to create the mouth.
+ * @param {Array<Number>} positions - Array containing position data for vertices
+ * @param {Array<Number} indices - Array containing index data for vertices
+ * @param {Array<Number} colors - Array containing color data for vertices (used for debugging)
+ * @param {Array<Number} orig_ring_indices - Array containing unique indices of original vertex ring
+ * @param {Number} mouthStickOut - value that scales mouth and makes it protrude more
+ * @param {Map<Number>} topLipSize - xyz scale of top lip
+ * @param {Map<Number>} topLipOffset - xyz offset of top lip
+ * @param {Map<Number>} botLipSize - xyz scale of bottom lip
+ * @param {Map<Number>} botLipOffset - xyz offset of bottom lip
+ * @returns {Array<Number>} all_idx - Array of unique new geometry indices created by this function
+ */
+function fill_ring_mouth(
+  positions, indices, colors, orig_ring_indices, 
+  mouthStickOut, 
+  topLipSize, topLipOffset, 
+  botLipSize, botLipOffset
+) {
     const numVerts = orig_ring_indices.length;
 
-    // 1. Validation
+    // Check if even number of verts
     if (numVerts % 2 !== 0) {
         console.error("fill_ring_mouth requires an even number of vertices.");
         return [];
     }
     const halfVerts = numVerts / 2;
 
-    // 2. Orientation & Corner Identification
+    // Get information about vert ring so we can position the lips correctly
     const { center, forward } = getRingData(positions, orig_ring_indices);
     
+    // finding corners of mouth
     let rightCornerIdx = orig_ring_indices[0];
     let leftCornerIdx = orig_ring_indices[halfVerts];
     let rightPos = getPos(rightCornerIdx, positions);
     let leftPos = getPos(leftCornerIdx, positions);
 
-    // 3. Create the Seam
-    // We explicitly track NEW indices to avoid duplicate vertex bugs later
+    // bridging corners of the mouth with verts
     let newSeamIndices = []; 
     let slitIndices = [rightCornerIdx]; 
 
     // Flatten Y to average
     let seamY = (rightPos.y + leftPos.y) / 2.0;
 
+    // creating new seam (mouth corner bridge) verts
     for (let i = 1; i < halfVerts; ++i) {
         let t = i / halfVerts;
         let newX = rightPos.x * (1.0 - t) + leftPos.x * t;
@@ -194,7 +263,6 @@ function fill_ring_mouth(positions, indices, colors, orig_ring_indices, mouthSti
     }
     slitIndices.push(leftCornerIdx); 
 
-    // 4. Bridge the Seam
     // Top Arc to Slit
     for (let i = 0; i < halfVerts; ++i) {
         let r_curr = orig_ring_indices[i];
@@ -218,8 +286,8 @@ function fill_ring_mouth(positions, indices, colors, orig_ring_indices, mouthSti
         if(r_curr !== s_curr) indices.push(r_curr, s_curr, r_next);
         if(r_next !== s_next) indices.push(r_next, s_curr, s_next);
     }
-
-    // 5. Define Loops
+    
+    // Vert loops used to extrude lips
     let topLoop = [];
     for(let i = 0; i <= halfVerts; i++) topLoop.push(orig_ring_indices[i]);
     for(let i = halfVerts - 1; i > 0; i--) topLoop.push(slitIndices[i]);
@@ -241,11 +309,7 @@ function fill_ring_mouth(positions, indices, colors, orig_ring_indices, mouthSti
     let botOffset = scaleVec(botDir, mouthStickOut);
     let botLipIndices = extrude_ring(positions, indices, botLoop, colors, botOffset);
 
-    // 7. Cap Ends (Using POLE instead of FAN)
-    // The 'offset' for the pole is 0,0,0 relative to the average center of the lip
     let poleOffset = {x:0, y:0, z:0};
-    
-    // 8. Transform (Include the caps!)
     let topLipCentroid = getCentroid(positions, topLipIndices);
     scale_around_point(positions, topLipIndices, topLipCentroid, topLipSize);
     translate(positions, topLipIndices, topLipOffset);
@@ -254,20 +318,37 @@ function fill_ring_mouth(positions, indices, colors, orig_ring_indices, mouthSti
     scale_around_point(positions, botLipIndices, botLipCentroid, botLipSize);
     translate(positions, botLipIndices, botLipOffset);
     
-    // Reverse = true usually points the face outward for extruded caps
+    // Reverse = true points the face outward for extruded caps
     let topCapIndices = fill_ring_pole(positions, indices, topLipIndices, colors, poleOffset, true);
     let botCapIndices = fill_ring_pole(positions, indices, botLipIndices, colors, poleOffset, true);
 
-    // 9. Return
     return [...newSeamIndices, ...topLipIndices, ...botLipIndices, ...topCapIndices, ...botCapIndices];
 }
+// Eye type enum used for head function. Currently unused
 export const eye_types = {
   BULGE: "BULGE",
   GOOGLY: "GOOGLY",
   CHEEKS: "CHEEKS",
   BUBBLY: "BUBBLY" 
 };
-function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}, eyeType, mouthTilt = 0.0) {
+/**
+ * Generates the head geometry for the goldfish, utilizing spline-based modeling to create
+ * the main head shape, mathematically positioning eyes on the curved surface, and 
+ * capping the geometry with a mouth.
+ * @param {Array<Number>} positions - Array containing position data for vertices
+ * @param {Array<Number>} indices - Array containing index data for vertices
+ * @param {Array<Number>} colors - Array containing color data for vertices
+ * @param {Array<Number>} labels - Array containing label data for vertices
+ * @param {Array<Object>} pivots - Array containing pivot data for animation
+ * @param {Map<Number>} headPos - xyz position of the head
+ * @param {Map<Number>} neckSize - xy scale of the neck connection point
+ * @param {Map<Number>} headSize - xyz scale of the head
+ * @param {Number} eyeScale - scale factor for the eyes
+ * @param {Number} eyeType - identifier for the type of eye to generate
+ * @param {Number} [mouthTilt=0.0] - vertical tilt offset for the mouth
+ * @returns {Array<Number>} all_idx - Array of unique new geometry indices created by this function
+ */
+function gfish_head(positions, indices, colors, labels, pivots, headPos, neckSize, headSize = {}, eyeScale, eyeType, mouthTilt = 0.0) {
   // ring, extrude while scaling down
   const numVertsRing = 8;
 
@@ -284,7 +365,8 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
     [headSize.x, headSize.y, 1.0]
   ];
 
-  let all_idx = create_ring_spline(
+  let all_idx = [];
+  let head_idx = create_ring_spline(
     positions, indices, colors,
     numVertsRing, // num verts in a ring (MUST BE EVEN for the mouth func to work)
     20,// num rings in spline
@@ -294,8 +376,10 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
     {x: 0, y: 0, z: 0.0},  //begin pole offset,
     {r: 0.1, g: 0.5, b: 0.1},
     false,
-    true
+    false
   );
+  assignLabel(labels, head_idx, 2);
+  all_idx.push(...head_idx);
 
   // Placing the eyes
   // define splines to sample points
@@ -345,15 +429,15 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
 
     // 4. Calculate Vectors for Normal Calculation
     // Vector A: The slope along the body (Longitudinal)
-    let l_slopeVec = normalize(sub(lPos1, lPos0));
-    let r_slopeVec = normalize(sub(rPos1, rPos0));
+    let l_slopeVec = normalize(subVec(lPos1, lPos0));
+    let r_slopeVec = normalize(subVec(rPos1, rPos0));
 
     // Vector B: The curve around the body (Latitudinal / Up)
     // We can approximate this by crossing the Spine Tangent with the Radial Vector
-    let spineTangent = normalize(sub({x: pos1[0], y: pos1[1], z: pos1[2]}, spinePos0));
+    let spineTangent = normalize(subVec({x: pos1[0], y: pos1[1], z: pos1[2]}, spinePos0));
     
-    let l_radial = normalize(sub(lPos0, spinePos0));
-    let r_radial = normalize(sub(rPos0, spinePos0));
+    let l_radial = normalize(subVec(lPos0, spinePos0));
+    let r_radial = normalize(subVec(rPos0, spinePos0));
 
     // Calculate "Surface Up" (Tangential to the ring)
     let l_up = normalize(cross(l_radial, spineTangent)); 
@@ -372,8 +456,6 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
     eyeInfoPacket.r.pos = rPos0;
     eyeInfoPacket.r.norm = r_trueNorm; // Use the new True Normal
     eyeInfoPacket.r.tangent = spineTangent;
-    
-    return;
   }
 
   let eyeShift = 0.4;
@@ -394,18 +476,16 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
   getEyeInfo(infoPacket, eyeShift, eyeAngle);
 
   function positionEye(eyeInfo) {
-    let fcn_eye_idx = sphere(positions, indices, colors, {x: 0.0, y: 0.0, z: 0.0}, {r: 0.1, g: 0.1, b: 0.5}, 1.0);
+    let fcn_eye_idx = sphere(positions, indices, colors, {x: 0.0, y: 0.0, z: 0.0}, {r: 0.1, g: 0.1, b: 0.5});
     
     // 1. Flatten the eye so we can see the orientation.
     // Z is 0.3 (Thin disk). 
-    scale_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 5.0 * headSize.x + 0.15, y: 5.0 * headSize.x + 0.15, z: 5.0 * headSize.x + 0.15});
+    scale_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: eyeScale, y: eyeScale, z: eyeScale});
     rotate_around_point(positions, fcn_eye_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 90.0, y: 0.0, z: 0.0})
 
     let fcn_origin = eyeInfo.pos;
     let fcn_forward = eyeInfo.norm;    // The Normal (Out of skin)
     let fcn_spine_tan = eyeInfo.tangent; // The direction of the spine
-
-    // 2. Construct the Orthogonal Basis (Gram-Schmidt-like process)
     
     // Step A: Z points OUT of the face.
     // This is the most important axis. The eye must face this way.
@@ -431,22 +511,22 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
     ];
 
     apply_matrix_transform(positions, fcn_eye_idx, fcn_matrix, {x: 0.0, y: 0.0, z: 0.0});
-
-    // 4. Translate to position
-    // OPTIONAL: Add a tiny offset along the normal to prevent Z-fighting/Clipping
-    // let offsetPos = addVec(fcn_origin, scaleVec(newZ, 0.02)); 
+ 
     translate(positions, fcn_eye_idx, fcn_origin);
 
     return fcn_eye_idx;
   }
 
   let eyeR_idx = positionEye(infoPacket.l);
+  assignLabel(labels, eyeR_idx, 3);
   all_idx.push(...eyeR_idx);
+
   let eyeL_idx = positionEye(infoPacket.r);
+  assignLabel(labels, eyeL_idx, 3);
   all_idx.push(...eyeL_idx);
   // Making the mouth
 
-  let lastRingStartIdx = all_idx[all_idx.length - numVertsRing - eyeR_idx.length - eyeL_idx.length - 1];
+  let lastRingStartIdx = all_idx[all_idx.length - numVertsRing - eyeR_idx.length - eyeL_idx.length];
   let finalRingIndices = [];
   for (let i = 0; i < numVertsRing; ++i)
   {
@@ -466,14 +546,20 @@ function gfish_head(positions, indices, colors, headPos, neckSize, headSize = {}
     {x: 0.65, y: 0.2, z: 1.0},
     {x:0.0, y:-0.025, z:-0.01}
   );
+  assignLabel(labels, mouth_idx, 4);
   all_idx.push(...mouth_idx);
   
   rotate_around_point(positions, all_idx, {x: 0.0, y: 0.0, z: 0.0}, {x: 0.0, y: 180.0, z: 0.0});
   translate(positions, all_idx, headPos);
   // end cap with special mouth geo function
+  assignPivot(pivots, head_idx, getCentroid(positions, head_idx));
+  assignPivot(pivots, eyeR_idx, getCentroid(positions, eyeR_idx));
+  assignPivot(pivots, eyeL_idx, getCentroid(positions, eyeL_idx));
+  assignPivot(pivots, mouth_idx, getCentroid(positions, mouth_idx));
   return all_idx;
 }
 
+// caudal fin type enum used for caudal fin function. Currently unused
 export const caudal_types = {
   DROOPY: "DROOPY",
   VSLOPE: "VSLOPE",
@@ -481,7 +567,24 @@ export const caudal_types = {
   VBUTT: "VBUTT",
   BUTTERFLY: "BUTTERFLY"
 };
-function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, caudalWidth, bodyLength, caudalType) {
+/**
+ * Generates the caudal (tail) fin geometry by creating a bifurcated structure.
+ * It extrudes a series of rings to form the fin base, then splits the geometry indices
+ * into two halves to apply opposing bend transformations, creating the iconic
+ * curved tail shape.
+ * @param {Array<Number>} positions - Array containing position data for vertices
+ * @param {Array<Number>} indices - Array containing index data for vertices
+ * @param {Array<Number>} colors - Array containing color data for vertices
+ * @param {Array<Object>} pivots - Array containing pivot data for animation
+ * @param {Map<Number>} caudalPos - xyz position of the caudal fin root
+ * @param {Number} caudalLength - Length of the tail fin
+ * @param {Number} caudalWidth - Width (thickness/spread) of the tail fin
+ * @param {Number} caudalCurve - Intensity of the curve applied to the tail lobes
+ * @param {Number} bodyLength - Length of the main body (used for relative scaling/positioning)
+ * @param {Number} caudalType - Identifier for the specific style of caudal fin
+ * @returns {Array<Number>} all_idx - Array of unique new geometry indices created by this function
+ */
+function gfish_caudal(positions, indices, colors, pivots, caudalPos, caudalLength, caudalWidth, caudalCurve, bodyLength, caudalType) {
   let iterVal = caudalWidth / 4.0;
 
   let all_idx = [];
@@ -535,34 +638,52 @@ function gfish_caudal(positions, indices, colors, caudalPos, caudalLength, cauda
   bend(
     positions, 
     firstHalf, 
-    1.5,                    // Amount (Swish strength)
+    1.5 * caudalCurve,      // Amount (Swish strength)
     vec3(0, 0, 0),          // Origin (The root of the tail)
-    caudalLength * 0.9,           // Max Length (For normalization)
+    caudalLength * 0.9,     // Max Length (For normalization)
     2,                      // Scale Axis: Z (Distance along the tail)
     1                       // Application Axis: X (Side-to-side movement)
   );
   bend(
     positions, 
     secondHalf, 
-    -1.5,                    // Amount (Swish strength)
+    -1.5 * caudalCurve,     // Amount (Swish strength)
     vec3(0, 0, 0),          // Origin (The root of the tail)
-    caudalLength * 0.9,           // Max Length (For normalization)
+    caudalLength * 0.9,     // Max Length (For normalization)
     2,                      // Scale Axis: Z (Distance along the tail)
     1                       // Application Axis: X (Side-to-side movement)
   );
   
   translate(positions, all_idx, caudalPos);
+  assignPivot(pivots, all_idx, getCentroid(positions, [all_idx[7], all_idx[40]]));
 
   return all_idx;
 }
 
+// dorsal fin type enum used for dorsal fin function. Currently unused
 export const dorsal_types = {
   MANE: "MANE",
   PUNK: "PUNK",
   SWEPT: "SWEPT"
 };
+/**
+ * Generates the dorsal fin geometry by extruding a series of rings along the top of the fish's back.
+ * It uses the body's position and scale splines to calculate the exact surface height at specific
+ * longitudinal points ('shift'), ensuring the fin appears rooted in the skin regardless of the 
+ * body's curve or thickness.
+ * @param {Array<Number>} positions - Array containing position data for vertices
+ * @param {Array<Number>} indices - Array containing index data for vertices
+ * @param {Array<Number>} colors - Array containing color data for vertices
+ * @param {Number} dorsalLength - The longitudinal length of the fin (0.0 to 1.0 relative to body)
+ * @param {Number} dorsalWidth - The thickness/width of the fin base
+ * @param {Number} dorsalShift - The starting position of the fin along the spine (0.0 to 1.0)
+ * @param {Array<Array<Number>>} posCtrlPoints - Control points for the body's position spline
+ * @param {Array<Array<Number>>} scaleCtrlPoints - Control points for the body's scale/thickness spline
+ * @param {Number} dorsalType - Identifier for the specific style of dorsal fin
+ * @returns {Array<Number>} all_idx - Array of unique new geometry indices created by this function
+ */
 function gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalShift, posCtrlPoints, scaleCtrlPoints, dorsalType) {
-  
+  // splines for sampling body curve
   const posPath = new CatmullRomSpline3D(
     posCtrlPoints,
     0.5
@@ -578,6 +699,7 @@ function gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dor
 
   const embedOffset = dorsalWidth * 0.25;
 
+  // length is clamped so it is not too long
   let clampedLength = Math.min(dorsalShift + dorsalLength, 1.0) - dorsalShift;
   clampedLength = Math.max(clampedLength, dorsalWidth * (7.0 / 6.0) * 0.15);
   let incVal = clampedLength / 3.0;
@@ -593,15 +715,15 @@ function gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dor
       return vec3(p[0], yPos, p[2]);
   }
 
-  // 3. Pre-calculate positions (now slightly lower)
+  // Pre-calculate positions (now slightly lower)
   let pos1 = getRingCenter(dorsalShift);
   let pos2 = getRingCenter(dorsalShift + incVal);
   let pos3 = getRingCenter(dorsalShift + incVal * 2.0);
   let pos4 = getRingCenter(dorsalShift + incVal * 3.0);
 
-  let delta1to2 = sub(pos2, pos1);
-  let delta2to3 = sub(pos3, pos2);
-  let delta3to4 = sub(pos4, pos3);
+  let delta1to2 = subVec(pos2, pos1);
+  let delta2to3 = subVec(pos3, pos2);
+  let delta3to4 = subVec(pos4, pos3);
 
   let all_idx = [];
 
@@ -634,12 +756,104 @@ function gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dor
   return all_idx;
 }
 
+// Anal fin type enum used for anal fin function. Currently unused
+export const afin_types = {
+  SPIKY: "SPIKY",
+  FEATHERY: "FEATHERY"
+};
+/**
+ * Generates the anal fin geometry on the ventral (bottom) side of the fish.
+ * Similar to the dorsal fin, it calculates the exact surface position using body splines,
+ * but applies an "anchored scaling" technique to flare the fin downwards while maintaining
+ * a tight connection to the body curvature.
+ * @param {Array<Number>} positions - Array containing position data for vertices
+ * @param {Array<Number>} indices - Array containing index data for vertices
+ * @param {Array<Number>} colors - Array containing color data for vertices
+ * @param {Number} afinLength - The longitudinal length of the fin
+ * @param {Number} afinWidth - The thickness/width of the fin base
+ * @param {Number} afinShift - The starting position of the fin along the spine (0.0 to 1.0)
+ * @param {Array<Array<Number>>} posCtrlPoints - Control points for the body's position spline
+ * @param {Array<Array<Number>>} scaleCtrlPoints - Control points for the body's scale/thickness spline
+ * @param {Number} afinType - Identifier for the specific style of anal fin
+ * @returns {Array<Number>} all_idx - Array of unique new geometry indices created by this function
+ */
+function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType) {
+
+  // body splines for sampling
+  const posPath = new CatmullRomSpline3D(posCtrlPoints, 0.5);
+  const scalePath = new CatmullRomSpline3D(scaleCtrlPoints, 0.5);
+
+  // constants to offset fin to make it look more natural
+  const finRadius = afinWidth * 0.5;
+  const embedOffset = afinWidth * 0.2; 
+
+  // ensures length is not too long
+  let clampedLength = Math.min(afinShift + afinLength, 0.9) - afinShift;
+
+  // --- HELPER: Calculate Absolute Ring Center ---
+  function getRingCenter(t) {
+      let p = posPath.getPoint(t);   
+      let s = scalePath.getPoint(t); 
+      
+      // yPos is the CENTER of the ring.
+      // SpineY - BodyRadius - FinRadius moves center just below body.
+      // + embedOffset tucks it slightly back in.
+      let yPos = p[1] - s[1] - finRadius + embedOffset;
+      
+      return vec3(p[0], yPos, p[2]);
+  }
+
+  // get positions of start and end of fin
+  let pos1 = getRingCenter(afinShift);
+  let pos2 = getRingCenter(afinShift + clampedLength);
+
+  let delta = subVec(pos2, pos1);
+
+  // --- GEOMETRY GENERATION ---
+  let all_idx = [];
+
+  let first_idx = create_ring(positions, indices, colors, 6, 0.05, finRadius, pos1);
+  let startPole = fill_ring_pole(positions, indices, first_idx, colors, vec3(0.0, 0.0, 0.0), false);
+
+  let second_idx = extrude_ring(positions, indices, first_idx, colors, delta);
+  
+  let anchorPoint = vec3(pos2.x, pos2.y + finRadius, pos2.z);
+  
+  scale_around_point(positions, second_idx, anchorPoint, vec3(1.0, 3.0, 1.0));
+
+  let endPole = fill_ring_pole(positions, indices, second_idx, colors, vec3(0.0, 0.0, 0.0), true);
+
+  // group for end
+  let end_idx = [...second_idx, ...endPole];
+
+  all_idx.push(
+    ...first_idx, 
+    ...startPole, 
+    ...end_idx
+  );
+
+  return all_idx;
+}
+
+/**
+ * Generates a single pelvic fin (left or right) using a spline-based extrusion.
+ * It constructs the fin shape using custom position and scale splines, applies specific
+ * rotations to the tip for styling, and then uses a change-of-basis matrix to perfectly 
+ * align the fin with the body's curved surface based on the provided normal and tangent vectors.
+ * @param {Array<Number>} positions - Array containing position data for vertices
+ * @param {Array<Number>} indices - Array containing index data for vertices
+ * @param {Array<Number>} colors - Array containing color data for vertices
+ * @param {Object} pelvicInfo - Packet containing surface data (pos, norm, tangent) for placement
+ * @param {Number} pelvicLength - The length of the fin
+ * @param {Number} pelvicWidth - The width of the fin
+ * @param {Boolean} left - If true, generates the left fin; otherwise, the right fin
+ * @returns {Array<Number>} all_idx - Array of unique new geometry indices created by this function
+ */
 function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, pelvicWidth, left = true) {
   let origin = pelvicInfo.pos;
   let forward = pelvicInfo.norm;
   let up = pelvicInfo.tangent;
 
-  // subdiv cube with fun values
   let all_idx = [];
   all_idx = create_ring_spline(
     positions, indices, colors, 
@@ -665,7 +879,7 @@ function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, pelv
   let end_idx = all_idx.slice(all_idx.length - 14, all_idx.length - 1);
   let end_centroid = getCentroid(positions, end_idx);
 
-  // rotate last 13 vertices to get pelvic fin shape
+  // rotate last 13 vertices to get pelvic fin shape (looks like a knee)
   if (left) {
     rotate_around_point(positions, end_idx, end_centroid, vec3(0.0, -30.0, 0.0));
     rotate_around_point(positions, all_idx, vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, -90.0));
@@ -685,6 +899,7 @@ function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, pelv
       newZ.x, newZ.y, newZ.z
   ];
 
+  // rotate to be perpendicular to body
   apply_matrix_transform(positions, all_idx, matrix, {x: 0.0, y: 0.0, z: 0.0});
 
   //console.log(pectoralPos);
@@ -693,12 +908,26 @@ function gfish_pelvic(positions, indices, colors, pelvicInfo, pelvicLength, pelv
   return all_idx;
 }
 
-function gfish_pectoral(positions, indices, colors, pectoralInfo, pectoralLength, pectoralWidth) {
+/**
+ * Generates a pectoral fin using spline-based extrusion.
+ * It creates the geometry based on length/width parameters and 
+ * orients the fin so that it protrudes in a perpendicular manner to the 
+ * curved surface of the fish's body, using the normal and tangent 
+ * vectors provided in the info packet.
+ * @param {Array<Number>} positions - Array containing position data for vertices
+ * @param {Array<Number>} indices - Array containing index data for vertices
+ * @param {Array<Number>} colors - Array containing color data for vertices
+ * @param {Array<Object>} pivots - Array containing pivot data for animation
+ * @param {Object} pectoralInfo - Packet containing surface data (pos, norm, tangent) for placement
+ * @param {Number} pectoralLength - The length of the fin
+ * @param {Number} pectoralWidth - The width of the fin
+ * @returns {Array<Number>} all_idx - Array of unique new geometry indices created by this function
+ */
+function gfish_pectoral(positions, indices, colors, pivots, pectoralInfo, pectoralLength, pectoralWidth) {
   let origin = pectoralInfo.pos;
   let forward = pectoralInfo.norm;
   let up = pectoralInfo.tangent;
 
-  // subdiv cube with fun values
   let all_idx = [];
   all_idx = create_ring_spline(
     positions, indices, colors, 
@@ -730,88 +959,84 @@ function gfish_pectoral(positions, indices, colors, pectoralInfo, pectoralLength
       newZ.x, newZ.y, newZ.z
   ];
 
+  // rotate to be perpendicular to body
   apply_matrix_transform(positions, all_idx, matrix, {x: 0.0, y: 0.0, z: 0.0});
 
-  //console.log(pectoralPos);
   translate(positions, all_idx, origin);
-  //rotate_around_point();
   return all_idx;
 }
 
-export const afin_types = {
-  SPIKY: "SPIKY",
-  FEATHERY: "FEATHERY"
-};
-function gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType) {
-  
-  const posPath = new CatmullRomSpline3D(posCtrlPoints, 0.5);
-  const scalePath = new CatmullRomSpline3D(scaleCtrlPoints, 0.5);
-
-  // 1. Define Radius and Embed Amount
-  const finRadius = afinWidth * 0.5;
-  
-  // ADD this to the height (since we are on the bottom, adding moves it UP into the body)
-  const embedOffset = afinWidth * 0.2; 
-
-  // ensures length is not too long
-  let clampedLength = Math.min(afinShift + afinLength, 0.9) - afinShift;
-
-  // --- HELPER: Calculate Absolute Ring Center ---
-  function getRingCenter(t) {
-      let p = posPath.getPoint(t);   
-      let s = scalePath.getPoint(t); 
-      
-      // Logic: Spine - Skin_Height - Fin_Radius + Embed_Amount
-      // We subtract s[1] and finRadius to move to the bottom edge.
-      // We ADD embedOffset to tuck it slightly back inside the mesh.
-      let yPos = p[1] - s[1] - finRadius + embedOffset;
-      
-      return vec3(p[0], yPos, p[2]);
+// make sure this is called after creating geometry, assumes everything is in order
+function assignLabel(labels, label_idx, labelVal)
+{
+  for (let i = 0; i <  label_idx.length; ++i) 
+  {
+    labels.push(labelVal);
   }
-
-  // 2. Pre-calculate absolute positions
-  let pos1 = getRingCenter(afinShift);
-  let pos2 = getRingCenter(afinShift + clampedLength);
-
-  // 3. Calculate Delta for exact extrusion
-  let delta = sub(pos2, pos1);
-
-  // --- GEOMETRY GENERATION ---
-  let all_idx = [];
-
-  // Ring 1 (Start)
-  let first_idx = create_ring(positions, indices, colors, 6, 0.05, finRadius, pos1);
-  let startPole = fill_ring_pole(positions, indices, first_idx, colors, vec3(0.0, 0.0, 0.0), false);
-
-  // Ring 2 (End)
-  // Extrude using the delta vector so it follows the body slope perfectly
-  let second_idx = extrude_ring(positions, indices, first_idx, colors, delta);
-  
-  // Apply the flair scaling (from your original code) around the calculated center
-  scale_around_point(positions, second_idx, vec3(pos2.x, pos2.y, pos2.z), vec3(1.0, 3.0, 1.0));
-
-  let endPole = fill_ring_pole(positions, indices, second_idx, colors, vec3(0.0, 0.0, 0.0), true);
-
-  // group for end
-  let end_idx = [...second_idx, ...endPole];
-
-  all_idx.push(
-    ...first_idx, 
-    ...startPole, 
-    ...end_idx
-  );
-
-  return all_idx;
 }
 
+// similarly fragile to assignLabel, but assigns pivot values
+function assignPivot(pivots, pivot_idx, pivotVal = {})
+{
+  for (let i = 0; i < pivot_idx.length; ++i)
+  {
+    pivots.push(pivotVal.x, pivotVal.y, pivotVal.z);
+  }
+}
+
+// COMBINED GOLDFISH FUNCTION --------------------------------------------------------
+
+/**
+ * Generates a procedural goldfish.
+ * @param {Array<Number>} positions - Array containing position data for vertices
+ * @param {Array<Number>} indices - Array containing index data for vertices
+ * @param {Array<Number>} colors - Array containing color data for vertices
+ * @param {Array<Number>} labels - Array containing label data for vertices (used for shader logic/picking)
+ * @param {Array<Object>} pivots - Array containing pivot data for animation
+ * * // Body Params
+ * @param {Number} bodyLength - Length of the main fuselage
+ * @param {Number} bodyHeight - Height of the main fuselage
+ * @param {Number} bodyWidth - Width of the main fuselage
+ * @param {Number} arch - Curvature/Arch of the spine
+ * * // Head Params
+ * @param {Object|Number} headSize - Size/Scale of the head
+ * @param {Number} eyeType - Enum identifier for eye style
+ * @param {Number} mouthTilt - Vertical tilt of the mouth
+ * @param {Number} eyeScale - Scale factor for the eyes
+ * * // Caudal (Tail) Params
+ * @param {Number} caudalLength - Length of the tail fin
+ * @param {Number} caudalWidth - Width of the tail fin
+ * @param {Number} caudalType - Enum identifier for tail style
+ * @param {Number} caudalCurve - Curvature intensity of the tail
+ * * // Dorsal Fin Params
+ * @param {Number} dorsalLength - Length of the dorsal fin
+ * @param {Number} dorsalWidth - Width of the dorsal fin
+ * @param {Number} dorsalShift - Position along the spine (0.0-1.0)
+ * @param {Number} dorsalType - Enum identifier for dorsal fin style
+ * * // Pelvic Fin Params
+ * @param {Number} pelvicLength - Length of the pelvic fins
+ * @param {Number} pelvicWidth - Width of the pelvic fins
+ * @param {Number} pelvicShift - Position along the body (0.0-1.0)
+ * @param {Number} pelvicAngle - Rotational angle of the fins
+ * * // Pectoral Fin Params
+ * @param {Number} pectoralLength - Length of the pectoral fins
+ * @param {Number} pectoralWidth - Width of the pectoral fins
+ * @param {Number} pectoralShift - Position along the body (0.0-1.0)
+ * @param {Number} pectoralAngle - Rotational angle of the fins
+ * * // Anal Fin Params
+ * @param {Number} afinLength - Length of the anal fin
+ * @param {Number} afinWidth - Width of the anal fin
+ * @param {Number} afinType - Enum identifier for anal fin style
+ * @param {Number} afinShift - Position along the spine (0.0-1.0)
+ */
 export function goldfish(
-    positions, indices, colors,
+    positions, indices, colors, labels, pivots,
     // body params 
     bodyLength, bodyHeight, bodyWidth, arch,
     // head params
-    headSize, eyeType, mouthTilt,
+    headSize, eyeType, mouthTilt, eyeScale,
     // caudal params
-    caudalLength, caudalWidth, caudalType,
+    caudalLength, caudalWidth, caudalType, caudalCurve,
     // dorsal params
     dorsalLength, dorsalWidth, dorsalShift, dorsalType,
     // pelvic params
@@ -848,14 +1073,14 @@ export function goldfish(
       tangent: {x: 0.0, y: 1.0, z: 0.0}
     }
   };
-
   let head_pos = {x: 0.0, y: 0.0, z: 0.0};
   let caudal_pos = vec3(0.0, 0.0, 0.0);
   let head_body_size = vec3(0.0, 0.0, 0.0);
-
   let posCtrlPoints = [];
   let scaleCtrlPoints = [];
-  gfish_body(
+
+  // previously defined pos/info/splines get updated via this function
+  let body_idx = gfish_body(
     positions, indices, colors, 
     bodyLength, bodyHeight, bodyWidth, arch,
     pectoralInfoPacket, pectoralShift, pectoralAngle,
@@ -865,19 +1090,42 @@ export function goldfish(
     posCtrlPoints,
     scaleCtrlPoints
   );
+  assignLabel(labels, body_idx, 0);
+  assignPivot(pivots, body_idx, getCentroid(positions, body_idx));
 
-  gfish_pectoral(positions, indices, colors, pectoralInfoPacket.l, pectoralLength, pectoralWidth);
-  gfish_pectoral(positions, indices, colors, pectoralInfoPacket.r, pectoralLength, pectoralWidth);
+  let pectoral_idx = gfish_pectoral(positions, indices, colors, pivots, pectoralInfoPacket.l, pectoralLength, pectoralWidth);
+  assignPivot(pivots, pectoral_idx, pectoralInfoPacket.l.pos);
 
-  gfish_pelvic(positions, indices, colors, pelvicInfoPacket.l, pelvicLength, pelvicWidth, true);
-  gfish_pelvic(positions, indices, colors, pelvicInfoPacket.r, pelvicLength, pelvicWidth, false);
+  let pectoral_idx2 = gfish_pectoral(positions, indices, colors, pivots, pectoralInfoPacket.r, pectoralLength, pectoralWidth);
+  assignPivot(pivots, pectoral_idx, pectoralInfoPacket.r.pos);
 
+  let bothPectoral_idx = [...pectoral_idx, ...pectoral_idx2];
+  assignLabel(labels, bothPectoral_idx, 6);
+
+  let pelvic_idx = gfish_pelvic(positions, indices, colors, pelvicInfoPacket.l, pelvicLength, pelvicWidth, true);
+  assignPivot(pivots, pelvic_idx, pelvicInfoPacket.l.pos);
+
+  let pelvic_idx2 = gfish_pelvic(positions, indices, colors, pelvicInfoPacket.r, pelvicLength, pelvicWidth, false);
+  assignPivot(pivots, pelvic_idx2, pelvicInfoPacket.r.pos);
+  
+  let bothPelvic_idx = [...pelvic_idx, ...pelvic_idx2];
+  assignLabel(labels, bothPelvic_idx, 1);
+
+  // add uneven shape to the head scale
   headSize.x *= 0.1;
   headSize.y *= 0.2;
-  gfish_head(positions, indices, colors, head_pos, head_body_size, headSize, eye_types.BUBBLY, mouthTilt);
-  gfish_caudal(positions, indices, colors, caudal_pos, caudalLength, caudalWidth, bodyLength, caudal_types.VBUTT); 
-  gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalShift, posCtrlPoints, scaleCtrlPoints, dorsalType);
-  gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType);
+  // assigns labels to eyes/head within the function
+  // also assigns pivots for eyes
+  gfish_head(positions, indices, colors, labels, pivots, head_pos, head_body_size, headSize, eyeScale, eye_types.BUBBLY, mouthTilt);
+  
+  let caudal_idx = gfish_caudal(positions, indices, colors, pivots, caudal_pos, caudalLength, caudalWidth, caudalCurve, bodyLength, caudal_types.VBUTT); 
+  assignLabel(labels, caudal_idx, 7);
 
-  return;
+  let dorsal_idx = gfish_dorsal(positions, indices, colors, dorsalLength, dorsalWidth, dorsalShift, posCtrlPoints, scaleCtrlPoints, dorsalType);
+  assignLabel(labels, dorsal_idx, 5);
+  assignPivot(pivots, dorsal_idx, getCentroid(positions, dorsal_idx)); // not used currently
+
+  let afin_idx = gfish_anal_fin(positions, indices, colors, afinLength, afinWidth, afinShift, posCtrlPoints, scaleCtrlPoints, afinType);
+  assignLabel(labels, afin_idx, 5);
+  assignPivot(pivots, afin_idx, getCentroid(positions, afin_idx)); // not used currently
 }
