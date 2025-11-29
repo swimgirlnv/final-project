@@ -79,12 +79,21 @@ Things to note:
  * @param {Array<Array<Number>>} scaleCtrlPoints_out - splineVec3 control points passed by reference to use later for body scale
  * @returns {Array<Number>} all_idx - Array of unique new geometry indices created by this function
  */
-// ---------- GOLDFISH BODY PART GENERATORS. PASS POS/IDX ARRAYS BY REFERENCE FOR UPDATE
-function gfish_body(positions, indices, colors, bodyLength, bodyHeight, bodyWidth, arch, 
+function gfish_body(
+    positions, indices, colors, 
+    bodyLength, bodyHeight, bodyWidth, arch, 
     pectoralInfoPacket_out, pectoralShift, pectoralAngle,
     pelvicInfoPacket_out, pelvicShift, pelvicAngle,
     caudalPos_out, 
     headPos_out, headBodySize_out,
+import { CatmullRomSpline3D } from "./SplineVec3.js";
+
+// ---------- GOLDFISH BODY PART GENERATORS. PASS POS/IDX ARRAYS BY REFERENCE FOR UPDATE
+function gfish_body(positions, indices, colors, bodyLength, height, width, arch, 
+    pectoralInfoPacket, pectoralShift, pectoralAngle,
+    pelvicInfoPacket, pelvicShift, pelvicAngle,
+    caudal_pos, 
+    head_pos, head_body_size,
     posCtrlPoints_out,
     scaleCtrlPoints_out  
 ) {
@@ -104,8 +113,6 @@ function gfish_body(positions, indices, colors, bodyLength, bodyHeight, bodyWidt
     [bodyWidth * 0.2, bodyHeight * 0.25, 1.0]
   ];
   scaleCtrlPoints_out.push(...scaleCtrlPoints);
-
-  console.log(posCtrlPoints, scaleCtrlPoints);
 
   // use spline with radius value, interpolate with even rings for body
   let all_idx = [];

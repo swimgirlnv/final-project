@@ -213,11 +213,11 @@
           <label><input id="showFishHouse" type="checkbox" checked /> Show fish house</label>
           
           <button class="btn" id="regenerate">Regenerate All</button>
-        </div>
-        
-        <!-- Fish Controls -->
-        <div class="control-section" id="section-fish">
-        <h1>🐠 Goldfish</h1>
+
+
+        <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
+            Fish
+        </h2>
 
         <h2 style="font-size: 13px; margin: 10px 0 6px; opacity: 0.9">
             Body Characteristics
@@ -309,8 +309,88 @@
             <input id="afinWidth" type="range" min="0.01" max="0.35" step="0.01" value="0.1" />
             <label> Anal Fin Shift </label>
             <input id="afinShift" type="range" min="0.35" max="0.7" step="0.01" value="0.68" />
+          <label>Tank Size</label>
+          <input id="tankSize" type="range" min="1.0" max="100.0" step="0.01" value="50.0" />
+          
         </div>
-      </div>
+        
+        <!-- Fish Controls -->
+        <div class="control-section" id="section-fish">
+          <h1>🐠 Goldfish</h1>
+          
+          <h2>Body</h2>
+          <label>Body Length</label>
+          <input id="bodyLength" type="range" min="0.5" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Body Height</label>
+          <input id="bodyHeight" type="range" min="0.3" max="1.5" step="0.01" value="0.8" />
+          
+          <label>Body Width</label>
+          <input id="bodyWidth" type="range" min="0.3" max="1.2" step="0.01" value="0.6" />
+          
+          <label>Arch</label>
+          <input id="arch" type="range" min="0.0" max="1.0" step="0.01" value="0.5" />
+          
+          <h2>Head</h2>
+          <label>Head Size</label>
+          <input id="headSize" type="range" min="0.5" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Mouth Tilt</label>
+          <input id="mouthTilt" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <h2>Caudal Fin (Tail)</h2>
+          <label>Caudal Length</label>
+          <input id="caudalLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Caudal Width</label>
+          <input id="caudalWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <h2>Dorsal Fin (Top)</h2>
+          <label>Dorsal Length</label>
+          <input id="dorsalLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Dorsal Width</label>
+          <input id="dorsalWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Dorsal Shift</label>
+          <input id="dorsalShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <h2>Pelvic Fins (Bottom)</h2>
+          <label>Pelvic Length</label>
+          <input id="pelvicLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pelvic Width</label>
+          <input id="pelvicWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pelvic Shift</label>
+          <input id="pelvicShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <label>Pelvic Angle</label>
+          <input id="pelvicAngle" type="range" min="-1.57" max="1.57" step="0.01" value="0.0" />
+          
+          <h2>Pectoral Fins (Side)</h2>
+          <label>Pectoral Length</label>
+          <input id="pectoralLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pectoral Width</label>
+          <input id="pectoralWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Pectoral Shift</label>
+          <input id="pectoralShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+          
+          <label>Pectoral Angle</label>
+          <input id="pectoralAngle" type="range" min="-1.57" max="1.57" step="0.01" value="0.0" />
+          
+          <h2>Anal Fin (Bottom Rear)</h2>
+          <label>Anal Fin Length</label>
+          <input id="afinLength" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Anal Fin Width</label>
+          <input id="afinWidth" type="range" min="0.3" max="2.0" step="0.01" value="1.0" />
+          
+          <label>Anal Fin Shift</label>
+          <input id="afinShift" type="range" min="-0.5" max="0.5" step="0.01" value="0.0" />
+        </div>
         
         <!-- Grass Controls -->
         <div class="control-section" id="section-grass">
@@ -417,6 +497,8 @@
           <label><input type="radio" name="floorPalette" id="floorPalGrey"> Grey gravel</label>
           <label><input type="radio" name="floorPalette" id="floorPalRainbow"> Rainbow gravel</label>
         </div>
+      </div>
+    </div>
     
     <script>
       // Icon sidebar toggle functionality
