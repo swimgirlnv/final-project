@@ -255,7 +255,7 @@ export function createFloorLayer(gl) {
       gl.uniform1f(U("u_fogStrength"), state.fogStrength);
       gl.uniform1f(U("u_fogBias"), state.fogBias);
 
-      // new uniforms for block behavior
+      // uniforms for block behavior
       gl.uniform1f(U("u_sandDepth"), SAND_DEPTH);
       gl.uniform2f(U("u_tankHalf"), TANK_X_HALF, TANK_Z_HALF);
 

@@ -14,7 +14,7 @@ in float i_height;
 in float i_phase;
 in float i_amp;
 in float i_hue;
-in float i_yaw;        // NEW: random ribbon yaw (radians)
+in float i_yaw;        // random ribbon yaw (radians)
 
 // Uniforms
 uniform mat4 u_proj;

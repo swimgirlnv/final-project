@@ -4,13 +4,49 @@ import { checkCollision2D, isInsideTank, registerObject } from "../../sceneColli
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 // ---- Noise + clump field ---------------------------------------------------
-const TANK = { xHalf: TANK_X_HALF, zHalf: TANK_Z_HALF }; // overall footprint used for clump cells
+const TANK = {
+  xHalf: TANK_X_HALF ?? 1.6,
+  zHalf: TANK_Z_HALF ?? 1.2,
+}; // overall footprint used for clump cells
 const CLUMP = {
   cell: 1.9, // grid cell size → spacing between possible Barclaya clumps
   radius: 0.15, // how far rosettes spread from a clump center
   noiseScale: 0.7, // FBM frequency for clump presence
-  threshold: 0.55, // higher = fewer clumps
+  threshold: 0.55, // baseline clump density
 };
+
+const INNER_MARGIN = {
+  x: 0.8, // how far to stay away from side walls
+  z: 0.8, // how far to stay away from front/back glass
+};
+
+// Barclaya-specific "inside tank" that keeps bases away from glass
+function insideInnerAquascape(x, z) {
+  return (
+    Math.abs(x) <= (TANK.xHalf - INNER_MARGIN.x) &&
+    Math.abs(z) <= (TANK.zHalf - INNER_MARGIN.z)
+  );
+}
+
+// We treat +z as the **back wall**
+// Returns 0 in the front-center, 1 near back/corners.
+function backCornerWeight(x, z) {
+  const xHalf = TANK.xHalf || 1.6;
+  const zHalf = TANK.zHalf || 1.2;
+
+  const nx = x / xHalf;      // -1 .. 1
+  const nz = z / zHalf;      // -1 .. 1
+
+  // "back" grows from mid-tank (nz≈0) toward back wall (nz≈+1)
+  const back = Math.max(0, (nz - 0.0) / 1.0); // 0 at mid/front, 1 near back
+
+  // "sides" grow from center (|nx|≈0) toward ±xHalf
+  const side = Math.max(0, (Math.abs(nx) - 0.2) / 0.8); // 0 in middle band, 1 at edges
+
+  // U-shape: strong near back or near side corners
+  const w = Math.max(back, side);
+  return Math.min(1, Math.max(0, w));
+}
 
 function fract1(x) {
   return x - Math.floor(x);
@@ -299,7 +335,7 @@ export function createBarclayaLayer(gl) {
     minLeaves: 5,
     maxLeaves: 11, // per rosette
     undulFreq: 22.0, // edge ripple frequency
-    spread: { x: TANK_X_HALF * 0.95, z: TANK_Z_HALF * 0.95 }, // tank footprint (used only for fallback singles)
+    spread: { x: TANK.xHalf * 0.95, z: TANK.zHalf * 0.95 }, // used for fallback singles
     redProb: 0.35, // chance a leaf is magenta-leaning
   };
 
@@ -311,15 +347,25 @@ export function createBarclayaLayer(gl) {
   const PLANT_RADIUS = 0.18; // rosette footprint for tank / object collisions
 
   // Helper to place one rosette at (cx, cz) with full collision checks
-  function placeRosetteAt(cx, cz, grid, d) {
+  // heightBias: 0 = short/foreground; 1 = tall/background
+  function placeRosetteAt(cx, cz, grid, d, heightBias) {
     const leaves = Math.floor(rand(state.minLeaves, state.maxLeaves + 0.999));
     const yawSeed = rand(0, Math.PI * 2);
     const localAccepted = [];
 
+    // global scale factor for this rosette
+    const heightScale = 0.7 + 0.9 * heightBias; // 0.7 .. 1.6
+
     for (let i = 0; i < leaves; i++) {
-      const len = rand(0.65, 1.35);
+      const baseLen = rand(0.65, 1.35);
+      const len = baseLen * heightScale;
+
       const wid = len * rand(0.12, 0.2); // half-width
-      const pitch = rand(0.45, 0.95);
+
+      // more upright in the back, more recumbent in the front
+      const pitchBase = rand(0.45, 0.95);
+      const pitch = pitchBase * (0.75 + 0.4 * heightBias);
+
       const arch = rand(0.04, 0.11);
       const undul = rand(0.01, 0.03);
       const hueTweak = rand(-0.03, 0.03);
@@ -378,7 +424,7 @@ export function createBarclayaLayer(gl) {
 
     let plantsPlaced = 0;
 
-    // ---------- CLUMPED ROSETTES ------------------------------------------
+    // ---------- CLUMPED ROSETTES (biased to back U) -----------------------
     const nx = Math.max(1, Math.floor((2 * TANK.xHalf) / CLUMP.cell));
     const nz = Math.max(1, Math.floor((2 * TANK.zHalf) / CLUMP.cell));
     const dx = (2 * TANK.xHalf) / nx;
@@ -389,12 +435,21 @@ export function createBarclayaLayer(gl) {
         const cxCell = -TANK.xHalf + (gx + 0.5) * dx;
         const czCell = -TANK.zHalf + (gz + 0.5) * dz;
 
+        const layoutBias = backCornerWeight(cxCell, czCell); // 0..1
+
+        // skip almost entirely front-center
+        if (layoutBias < 0.1) continue;
+
         const n = fbm2(
           (cxCell + seed) * CLUMP.noiseScale,
           (czCell - seed) * CLUMP.noiseScale,
           4
         );
-        if (n < CLUMP.threshold) continue; // no clump here
+
+        // lower threshold where layoutBias is high → more clumps in the U
+        const localThresh =
+          CLUMP.threshold - 0.25 * layoutBias; // up to ~0.3 easier to pass near back/corners
+        if (n < localThresh) continue; // no clump here
 
         const group = Math.min(
           1 + Math.floor(rand(0, 3)), // 1–3 rosettes per clump
@@ -407,18 +462,21 @@ export function createBarclayaLayer(gl) {
           const cx = cxCell + r * Math.cos(ang);
           const cz = czCell + r * Math.sin(ang);
 
+          if (!insideInnerAquascape(cx, cz)) continue;
+
           if (!isInsideTank(cx, cz, PLANT_RADIUS)) continue;
           if (checkCollision2D(cx, cz, PLANT_RADIUS, 0.0)) continue;
           registerObject(cx, cz, PLANT_RADIUS, "barclaya");
 
-          if (placeRosetteAt(cx, cz, grid, d)) {
+          const heightBias = backCornerWeight(cx, cz);
+          if (placeRosetteAt(cx, cz, grid, d, heightBias)) {
             plantsPlaced++;
           }
         }
       }
     }
 
-    // ---------- FALLBACK SINGLES (if noise too sparse) --------------------
+    // ---------- FALLBACK SINGLES (still biased to the U) ------------------
     const maxPlantAttempts = state.plants * 40;
     let attempts = 0;
     while (plantsPlaced < state.plants && attempts < maxPlantAttempts) {
@@ -426,11 +484,19 @@ export function createBarclayaLayer(gl) {
       const cx = rand(-state.spread.x, state.spread.x);
       const cz = rand(-state.spread.z, state.spread.z);
 
+      const layoutBias = backCornerWeight(cx, cz);
+      // Random rejection: front-center almost never gets chosen
+      if (Math.random() > 0.15 + 0.8 * layoutBias) continue;
+      
+      if (!insideInnerAquascape(cx, cz)) continue;
+
       if (!isInsideTank(cx, cz, PLANT_RADIUS)) continue;
       if (checkCollision2D(cx, cz, PLANT_RADIUS, 0.0)) continue;
 
-      if (placeRosetteAt(cx, cz, grid, d)) {
+      const heightBias = layoutBias;
+      if (placeRosetteAt(cx, cz, grid, d, heightBias)) {
         plantsPlaced++;
+        registerObject(cx, cz, PLANT_RADIUS, "barclaya");
       }
     }
 
