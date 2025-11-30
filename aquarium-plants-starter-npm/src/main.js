@@ -13,6 +13,7 @@ import { resetCollisionState, updateTankBounds, findValidPosition, registerObjec
 import { createGoldfish, regenerateGoldfishGeometry } from "./fish/goldfish.js";
 import { createBubbleLayer } from "./decorations/bubbles/bubbles.js";
 import { createTreasureChestLayer } from "./decorations/treasureChest/treasureChest.js";
+import { createWaterSurfaceLayer } from "./tank/water.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -380,6 +381,7 @@ const staghornCoral = createStaghornCoralLayer(gl);
 const grass = createGrassLayer(gl);
 const gfish = createGoldfish(gl);
 const bubbles = createBubbleLayer(gl);
+const waterSurface = createWaterSurfaceLayer(gl);
 
 // Generate random position for treasure chest
 function generateChestPosition() {
@@ -828,4 +830,5 @@ let last = performance.now(),
   if (showChest?.checked !== false) chestLayer.draw(shared);
   bubbles.draw(shared);
   gfish.draw(shared);
+  waterSurface.draw(shared);
 })();
