@@ -1,6 +1,6 @@
 // plants/coralReef.js
 import { vs, fs } from "./coralReefShaders.js";
-import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
+import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 export function createCoralReefLayer(gl) {
@@ -197,6 +197,7 @@ export function createCoralReefLayer(gl) {
 
       if (!isInsideTank(x, z, radiusForCollision)) continue;
       if (checkCollision2D(x, z, radiusForCollision, 0.0)) continue;
+      registerObject(x, z, radiusForCollision, "coral");
 
       const y = -0.02; // slightly buried into sand
       const heightScale = rand(0.8, 1.4);

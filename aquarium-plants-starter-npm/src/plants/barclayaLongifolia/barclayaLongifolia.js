@@ -1,13 +1,13 @@
 // plants/barclayaLongifolia.js
 import { vs, fs } from "./barclayaLongifoliaShaders.js";
-import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
+import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 // ---- Noise + clump field ---------------------------------------------------
 const TANK = { xHalf: TANK_X_HALF, zHalf: TANK_Z_HALF }; // overall footprint used for clump cells
 const CLUMP = {
-  cell: 0.9, // grid cell size → spacing between possible Barclaya clumps
-  radius: 0.35, // how far rosettes spread from a clump center
+  cell: 1.9, // grid cell size → spacing between possible Barclaya clumps
+  radius: 0.15, // how far rosettes spread from a clump center
   noiseScale: 0.7, // FBM frequency for clump presence
   threshold: 0.55, // higher = fewer clumps
 };
@@ -409,6 +409,7 @@ export function createBarclayaLayer(gl) {
 
           if (!isInsideTank(cx, cz, PLANT_RADIUS)) continue;
           if (checkCollision2D(cx, cz, PLANT_RADIUS, 0.0)) continue;
+          registerObject(cx, cz, PLANT_RADIUS, "barclaya");
 
           if (placeRosetteAt(cx, cz, grid, d)) {
             plantsPlaced++;

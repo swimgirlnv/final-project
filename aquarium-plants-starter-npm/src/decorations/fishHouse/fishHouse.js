@@ -215,8 +215,23 @@ export function createFishHouseLayer(gl) {
 
   // simple model transform state
   let model = new Float32Array([
-    1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.7, -0.02, -0.2, 1,
+    1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
   ]);
+
+  // Find a valid position for the fish house
+  const houseRadius = 0.35;
+  const pos = findValidPosition(houseRadius, 100, 0.02);
+  if (pos) {
+    model[12] = pos.x;
+    model[13] = 0.0;
+    model[14] = pos.z;
+    registerObject(pos.x, pos.z, houseRadius, "fishHouse");
+  } else {
+    // Fallback position if no valid spot found
+    model[12] = 0.7;
+    model[13] = 0.0;
+    model[14] = -0.9;
+  }
 
   return {
     setPosition(x, y, z) {
@@ -243,6 +258,15 @@ export function createFishHouseLayer(gl) {
       params.leafLength = l;
     },
     regenerate() {
+      // Find a new valid position
+      const houseRadius = 0.35;
+      const pos = findValidPosition(houseRadius, 100, 0.02);
+      if (pos) {
+        model[12] = pos.x;
+        model[13] = 0.0;
+        model[14] = pos.z;
+        registerObject(pos.x, pos.z, houseRadius, "fishHouse");
+      }
       mesh = makeHouse();
       buildBuffers();
     },

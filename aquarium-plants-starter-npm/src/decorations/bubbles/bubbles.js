@@ -142,7 +142,7 @@ export function createBubbleLayer(gl) {
     if (bubbles.length >= MAX_BUBBLES) {
       bubbles.shift();
     }
-    const radius = rand(0.02, 0.05);
+    const radius = rand(0.01, 0.03);
     const life = rand(3.0, 6.0);
     const vy = rand(0.25, 0.55);
 

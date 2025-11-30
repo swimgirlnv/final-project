@@ -1,5 +1,5 @@
 import { vs, fs } from "./grassShaders.js";
-import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
+import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 const TANK = { xHalf: TANK_X_HALF, zHalf: TANK_Z_HALF }; // world half-extents in X/Z
@@ -215,6 +215,7 @@ export function createGrassLayer(gl) {
 
       // still avoid big objects / holes
       if (checkCollision2D(x, z, grassRadius, 0.0)) continue;
+      registerObject(x, z, grassRadius, "grass");
 
       // noise in [0,1]
       const n = valueNoise2D(x * FREQ, z * FREQ);

@@ -1,4 +1,5 @@
 import { vs, fs } from "./fanShaders.js";
+import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 export function createFanCoralLayer(gl) {
@@ -175,46 +176,69 @@ export function createFanCoralLayer(gl) {
 
     const xHalf = TANK_X_HALF * 0.9;
     const zHalf = TANK_Z_HALF * 0.9;
+    const fanRadius = 0.22;
 
-    for (let i = 0; i < FANS; i++) {
+    let placed = 0;
+    let attempts = 0;
+    const MAX_ATTEMPTS = FANS * 40;
+
+    while (placed < FANS && attempts < MAX_ATTEMPTS) {
+      attempts++;
+      
       const baseX = rand(-xHalf, xHalf);
       const baseZ = rand(-zHalf, zHalf);
+      
+      if (!isInsideTank(baseX, baseZ, fanRadius)) continue;
+      if (checkCollision2D(baseX, baseZ, fanRadius, 0.0)) continue;
+      registerObject(baseX, baseZ, fanRadius, "fanCoral");
+      
       const baseY = -0.02; // just above sand
       const hue = rand(0.04, 0.09); // warm orange range
 
       addFan(mesh, baseX, baseY, baseZ, hue);
+      placed++;
     }
 
     return mesh;
   }
 
-  const mesh = buildMesh();
+  let mesh = buildMesh();
+  
+  // Ensure mesh always has the required structure
+  if (!mesh) {
+    mesh = { pos: [], norm: [], height: [], hue: [], idx: [] };
+  }
 
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
 
-  function vbuf(data, loc, size) {
-    const b = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, b);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
-    return b;
+  let posBuffer, normBuffer, heightBuffer, hueBuffer, indexBuffer;
+
+  function rebuildBuffers() {
+    function vbuf(data, loc, size, buffer) {
+      const b = buffer || gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+      return b;
+    }
+
+    posBuffer = vbuf(mesh.pos, 0, 3, posBuffer);
+    normBuffer = vbuf(mesh.norm, 1, 3, normBuffer);
+    heightBuffer = vbuf(mesh.height, 2, 1, heightBuffer);
+    hueBuffer = vbuf(mesh.hue, 3, 1, hueBuffer);
+
+    if (!indexBuffer) indexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    gl.bufferData(
+      gl.ELEMENT_ARRAY_BUFFER,
+      new Uint16Array(mesh.idx),
+      gl.STATIC_DRAW
+    );
   }
 
-  vbuf(mesh.pos,    0, 3); // a_pos
-  vbuf(mesh.norm,   1, 3); // a_normal
-  vbuf(mesh.height, 2, 1); // a_height
-  vbuf(mesh.hue,    3, 1); // a_hue
-
-  const ib = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
-  gl.bufferData(
-    gl.ELEMENT_ARRAY_BUFFER,
-    new Uint16Array(mesh.idx),
-    gl.STATIC_DRAW
-  );
-  const indexCount = mesh.idx.length;
+  rebuildBuffers();
 
   const prog = program(vs, fs, {
     a_pos:    0,
@@ -232,12 +256,21 @@ export function createFanCoralLayer(gl) {
   const u_fogFar   = U("u_fogFar");
 
   return {
+    setFanCount(n) {
+      // FANS is const, so this doesn't change the count
+      // If you want dynamic count, make FANS a state variable
+    },
+    
     regenerate() {
-      // optional: hook up later if you want re-randomization
+      mesh = buildMesh();
+      if (mesh && mesh.idx && mesh.idx.length > 0) {
+        gl.bindVertexArray(vao);
+        rebuildBuffers();
+      }
     },
 
     draw(shared) {
-      if (!indexCount) return;
+      if (!mesh || !mesh.idx || !mesh.idx.length) return;
 
       gl.useProgram(prog);
       gl.bindVertexArray(vao);
@@ -259,7 +292,7 @@ export function createFanCoralLayer(gl) {
       gl.uniform1f(u_fogNear, shared.fogNear);
       gl.uniform1f(u_fogFar,  shared.fogFar);
 
-      gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_SHORT, 0);
+      gl.drawElements(gl.TRIANGLES, mesh.idx.length, gl.UNSIGNED_SHORT, 0);
 
       if (hadCull) gl.enable(gl.CULL_FACE);
     },

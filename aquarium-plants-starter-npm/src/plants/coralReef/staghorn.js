@@ -1,5 +1,5 @@
 import { vs, fs } from "./staghornShaders.js";
-import { checkCollision2D, isInsideTank } from "../../sceneCollision.js";
+import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 export function createStaghornCoralLayer(gl) {
@@ -184,6 +184,7 @@ export function createStaghornCoralLayer(gl) {
 
       if (!isInsideTank(cx, cz, colonyRadius)) continue;
       if (checkCollision2D(cx, cz, colonyRadius, 0.0)) continue;
+      registerObject(cx, cz, colonyRadius, "staghorn");
 
       colonyCenters.push({ x: cx, z: cz });
     }

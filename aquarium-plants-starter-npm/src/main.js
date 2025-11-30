@@ -14,6 +14,7 @@ import { createGoldfish, regenerateGoldfishGeometry } from "./fish/goldfish.js";
 import { createBubbleLayer } from "./decorations/bubbles/bubbles.js";
 import { createTreasureChestLayer } from "./decorations/treasureChest/treasureChest.js";
 import { createWaterSurfaceLayer } from "./tank/water.js";
+import { createTankGlassLayer } from "./tank/glass.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -297,7 +298,7 @@ initGoldfishUI();
 const cam = {
   target: [0, 0.9, 0],
   r: 3.4,
-  az: Math.PI * 0.5,
+  az: Math.PI * 1.5,
   el: 0.09,
   minR: 1.1,
   maxR: 7.0,
@@ -355,7 +356,7 @@ canvas.addEventListener(
 );
 document.getElementById("resetCam")?.addEventListener("click", () => {
   cam.r = 3.4;
-  cam.az = Math.PI * 0.5;
+  cam.az = Math.PI * 1.5;
   cam.el = 0.09;
   cam.vAz = cam.vEl = cam.vR = 0;
 });
@@ -382,6 +383,7 @@ const grass = createGrassLayer(gl);
 const gfish = createGoldfish(gl);
 const bubbles = createBubbleLayer(gl);
 const waterSurface = createWaterSurfaceLayer(gl);
+const tankGlass = createTankGlassLayer(gl);
 
 // Generate random position for treasure chest
 function generateChestPosition() {
@@ -812,6 +814,7 @@ let last = performance.now(),
     floorAmp: fp.amp,
     floorScale: fp.scale,
     floorYOffset: fp.yOffset,
+    camPos: eye,
   };
 
   // draw
@@ -831,4 +834,5 @@ let last = performance.now(),
   bubbles.draw(shared);
   gfish.draw(shared);
   waterSurface.draw(shared);
+  tankGlass.draw(shared);
 })();
