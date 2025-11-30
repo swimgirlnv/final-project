@@ -4,6 +4,7 @@ import { vs, fs } from "./tankFloorShaders.js";
 // Single source of truth for tank size
 export let TANK_X_HALF = 2.6;
 export let TANK_Z_HALF = 2.2;
+export const TANK_HEIGHT = 1.8;  // Fixed height of the tank
 const SAND_DEPTH = 0.15;
 
 // Function to update tank dimensions

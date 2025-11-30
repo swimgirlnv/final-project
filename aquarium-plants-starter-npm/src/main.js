@@ -1,13 +1,19 @@
 // src/main.js
 import { createEgeriaLayer } from "./plants/egeriaDensa/egeriaDensa.js";
 import { createGrassLayer } from "./plants/grass/grass.js";
-import { createFloorLayer, setTankSize } from "./tank/tankFloor.js";
+import { createFloorLayer, setTankSize, TANK_X_HALF, TANK_Z_HALF } from "./tank/tankFloor.js";
 import { createBarclayaLayer } from "./plants/barclayaLongifolia/barclayaLongifolia.js";
+import { createCoralReefLayer } from "./plants/coralReef/coralReef.js";
+import { createFanCoralLayer } from "./plants/coralReef/fan.js";
+import { createStaghornCoralLayer } from "./plants/coralReef/staghorn.js";
 import { createDriftwoodLayer } from "./decorations/driftwood/driftwood.js";
 import { createBoulderLayer } from "./decorations/boulder/boulder.js";
 import { createFishHouseLayer } from "./decorations/fishHouse/fishHouse.js";
-import { resetCollisionState, updateTankBounds } from "./sceneCollision.js";
+import { resetCollisionState, updateTankBounds, findValidPosition, registerObject, TANK_BOUNDS } from "./sceneCollision.js";
 import { createGoldfish, regenerateGoldfishGeometry } from "./fish/goldfish.js";
+import { createBubbleLayer } from "./decorations/bubbles/bubbles.js";
+import { createTreasureChestLayer } from "./decorations/treasureChest/treasureChest.js";
+import { createWaterSurfaceLayer } from "./tank/water.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -94,9 +100,11 @@ const fpsEl = document.getElementById("fps");
 const showGrass = document.getElementById("showGrass");
 const showEgeria = document.getElementById("showEgeria");
 const showBarclaya = document.getElementById("showBarclaya");
+const showCoral = document.getElementById("showCoral");
 const showWood = document.getElementById("showWood");
 const showBoulders = document.getElementById("showBoulders");
 const showFishHouse = document.getElementById("showFishHouse");
+const showChest = document.getElementById("showChest");
 
 const currentStrength = 0;
 const currentAngle = -3.14;
@@ -116,6 +124,21 @@ const egBranch = document.getElementById("egeriaBranch");
 const scatterBtn = document.getElementById("scatter");
 const regenBtn = document.getElementById("regenerate");
 
+// coral controls
+const coralCount = document.getElementById("coralCount");
+const coralCountLabel = document.getElementById("coralCountLabel");
+const coralMinRadius = document.getElementById("coralMinRadius");
+const coralMaxRadius = document.getElementById("coralMaxRadius");
+const coralRegenerate = document.getElementById("coralRegenerate");
+
+// fan coral controls
+const fanCount = document.getElementById("fanCount");
+const fanCountLabel = document.getElementById("fanCountLabel");
+
+// staghorn coral controls
+const staghornColonies = document.getElementById("staghornColonies");
+const staghornBranches = document.getElementById("staghornBranches");
+
 // wood controls
 const woodPieces = document.getElementById("woodPieces");
 const woodBranches = document.getElementById("woodBranches");
@@ -130,6 +153,16 @@ const woodWarm = document.getElementById("woodWarm");
 const boulderCount = document.getElementById("boulderCount");
 const boulderCountLabel = document.getElementById("boulderCountLabel");
 const boulderRegenerate = document.getElementById("boulderRegenerate");
+const chestRegenerate = document.getElementById("chestRegenerate");
+
+// fish house controls
+const fishHouseHeight = document.getElementById("fishHouseHeight");
+const fishHouseRadius = document.getElementById("fishHouseRadius");
+const fishHouseBulge = document.getElementById("fishHouseBulge");
+const fishHouseStacks = document.getElementById("fishHouseStacks");
+const fishHouseLeafCount = document.getElementById("fishHouseLeafCount");
+const fishHouseLeafLength = document.getElementById("fishHouseLeafLength");
+const fishHouseRegenerate = document.getElementById("fishHouseRegenerate");
 
 // tank floor controls
 const floorGravelMix = document.getElementById("floorGravelMix");
@@ -342,9 +375,30 @@ const fishHouse = createFishHouseLayer(gl);
 const boulders = createBoulderLayer(gl);
 const egeria = createEgeriaLayer(gl);
 const barclaya = createBarclayaLayer(gl);
+const coral = createCoralReefLayer(gl);
+const fanCoral = createFanCoralLayer(gl);
+const staghornCoral = createStaghornCoralLayer(gl);
 const grass = createGrassLayer(gl);
 const gfish = createGoldfish(gl);
+const bubbles = createBubbleLayer(gl);
+const waterSurface = createWaterSurfaceLayer(gl);
 
+// Generate random position for treasure chest
+function generateChestPosition() {
+  const chestRadius = 0.35;
+  const pos = findValidPosition(chestRadius, 100, 0.1);
+  if (pos) {
+    registerObject(pos.x, pos.z, chestRadius, "chest");
+    return [pos.x, -0.05, pos.z];
+  }
+  // Fallback to a safe position if random placement fails
+  return [TANK_BOUNDS.xMax * 0.6, -0.05, TANK_BOUNDS.zMax * 0.3];
+}
+
+const chestLayer = createTreasureChestLayer(gl, {
+  position: generateChestPosition(),
+  spawnBubble: bubbles.spawnBubble,
+});
 const FOG = { color: [0.02, 0.07, 0.13], near: 2.0, far: 5.5 };
 floor.setFog(FOG.color, FOG.near, FOG.far);
 
@@ -354,6 +408,18 @@ function updateCountLabel() {
     plantCountLabel.textContent = String(plantCount.value);
 }
 updateCountLabel();
+
+function updateCoralCountLabel() {
+  if (coralCountLabel && coralCount)
+    coralCountLabel.textContent = String(coralCount.value);
+}
+updateCoralCountLabel();
+
+function updateFanCountLabel() {
+  if (fanCountLabel && fanCount)
+    fanCountLabel.textContent = String(fanCount.value);
+}
+updateFanCountLabel();
 
 if (plantCount)
   plantCount.addEventListener("input", () => {
@@ -413,21 +479,104 @@ if (egBranch)
     grass.regenerate();
   });
 
+// Coral controls
+if (coralCount)
+  coralCount.addEventListener("input", () => {
+    coral.setCount(+coralCount.value);
+    updateCoralCountLabel();
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    coral.regenerate();
+    egeria.regenerate();
+    grass.regenerate();
+  });
+if (coralMinRadius)
+  coralMinRadius.addEventListener("input", () => {
+    coral.setMinRadius(+coralMinRadius.value);
+  });
+if (coralMaxRadius)
+  coralMaxRadius.addEventListener("input", () => {
+    coral.setMaxRadius(+coralMaxRadius.value);
+  });
+if (coralRegenerate)
+  coralRegenerate.addEventListener("click", () => {
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
+    coral.regenerate();
+    fanCoral.regenerate();
+    staghornCoral.regenerate();
+    grass.regenerate();
+  });
+
+// Fan coral controls
+if (fanCount)
+  fanCount.addEventListener("input", () => {
+    fanCoral.setFanCount(+fanCount.value);
+    updateFanCountLabel();
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
+    coral.regenerate();
+    fanCoral.regenerate();
+    staghornCoral.regenerate();
+    grass.regenerate();
+  });
+
+// Staghorn coral controls
+if (staghornColonies)
+  staghornColonies.addEventListener("input", () => {
+    staghornCoral.setColonies(+staghornColonies.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
+    coral.regenerate();
+    fanCoral.regenerate();
+    staghornCoral.regenerate();
+    grass.regenerate();
+  });
+
+if (staghornBranches)
+  staghornBranches.addEventListener("input", () => {
+    staghornCoral.setBranchesPerColony(+staghornBranches.value);
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
+    coral.regenerate();
+    fanCoral.regenerate();
+    staghornCoral.regenerate();
+    grass.regenerate();
+  });
+
 if (scatterBtn)
   scatterBtn.addEventListener("click", () => {
     resetCollisionState();
     driftwood.regenerate();
     boulders.regenerate();
     barclaya.regenerate();
+    coral.regenerate();
     egeria.regenerate();
     grass.regenerate();
   });
 if (regenBtn)
   regenBtn.addEventListener("click", () => {
     resetCollisionState();
+    const newChestPos = generateChestPosition();
+    chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
     driftwood.regenerate();
     boulders.regenerate();
     barclaya.regenerate();
+    coral.regenerate();
     egeria.regenerate();
     grass.regenerate();
   });
@@ -507,6 +656,53 @@ if (boulderRegenerate) boulderRegenerate.addEventListener("click", () => {
   grass.regenerate();
 });
 
+if (chestRegenerate) chestRegenerate.addEventListener("click", () => {
+  resetCollisionState();
+  const newChestPos = generateChestPosition();
+  chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
+  driftwood.regenerate();
+  boulders.regenerate();
+  barclaya.regenerate();
+  egeria.regenerate();
+  grass.regenerate();
+});
+
+// Fish house controls
+if (fishHouseHeight)
+  fishHouseHeight.addEventListener("input", () => {
+    fishHouse.setHeight(+fishHouseHeight.value);
+    fishHouse.regenerate();
+  });
+if (fishHouseRadius)
+  fishHouseRadius.addEventListener("input", () => {
+    fishHouse.setBaseRadius(+fishHouseRadius.value);
+    fishHouse.regenerate();
+  });
+if (fishHouseBulge)
+  fishHouseBulge.addEventListener("input", () => {
+    fishHouse.setBulge(+fishHouseBulge.value);
+    fishHouse.regenerate();
+  });
+if (fishHouseStacks)
+  fishHouseStacks.addEventListener("input", () => {
+    fishHouse.setStacks(+fishHouseStacks.value);
+    fishHouse.regenerate();
+  });
+if (fishHouseLeafCount)
+  fishHouseLeafCount.addEventListener("input", () => {
+    fishHouse.setLeafCount(+fishHouseLeafCount.value);
+    fishHouse.regenerate();
+  });
+if (fishHouseLeafLength)
+  fishHouseLeafLength.addEventListener("input", () => {
+    fishHouse.setLeafLength(+fishHouseLeafLength.value);
+    fishHouse.regenerate();
+  });
+if (fishHouseRegenerate)
+  fishHouseRegenerate.addEventListener("click", () => {
+    fishHouse.regenerate();
+  });
+
 floorGravelMix?.addEventListener("input", () =>
   floor.setGravelMix(+floorGravelMix.value)
 );
@@ -534,8 +730,11 @@ palRainbow?.addEventListener(
 tankSize?.addEventListener("input", () => {
   setTankSize(+tankSize.value);
   floor.regenerate();
-  updateTankBounds();
+  // Update tank bounds with the new dimensions from tankFloor
+  updateTankBounds(TANK_X_HALF, TANK_Z_HALF);
   resetCollisionState();
+  const newChestPos = generateChestPosition();
+  chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
   driftwood.regenerate();
   boulders.regenerate();
   fishHouse.regenerate();
@@ -623,5 +822,13 @@ let last = performance.now(),
   if (showGrass?.checked !== false) grass.draw(shared);
   if (showEgeria?.checked !== false) egeria.draw(shared);
   if (showBarclaya?.checked !== false) barclaya.draw(shared);
+  if (showCoral?.checked !== false) {
+    coral.draw(shared);
+    fanCoral.draw(shared);
+    staghornCoral.draw(shared);
+  }
+  if (showChest?.checked !== false) chestLayer.draw(shared);
+  bubbles.draw(shared);
   gfish.draw(shared);
+  waterSurface.draw(shared);
 })();
