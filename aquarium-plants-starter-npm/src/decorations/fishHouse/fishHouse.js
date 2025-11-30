@@ -26,6 +26,16 @@ export function createFishHouseLayer(gl) {
     return p;
   }
 
+  // Parameters that can be adjusted
+  const params = {
+    height: 0.65,
+    baseRadius: 0.24,
+    bulge: 0.55,
+    stacks: 20,
+    leafCount: 12,
+    leafLength: 0.4,
+  };
+
   function makeHouse() {
     // Rounded tapered pineapple-like body and a crown of leaves.
     const pos = [];
@@ -34,17 +44,18 @@ export function createFishHouseLayer(gl) {
     const idx = [];
 
     // body parameters
-    const stacks = 20;
+    const stacks = params.stacks;
     const slices = 32;
-    const height = 0.65;
+    const height = params.height;
     const y0 = 0.0; // bottom y
-    const baseRadius = 0.24;
+    const baseRadius = params.baseRadius;
+    const bulge = params.bulge;
 
     // smoother bulgy profile: small at bottom/top, widest in the middle
     function radiusAt(t) {
       // t in [0,1]
       const s = Math.sin(Math.PI * t); // 0 -> 1 -> 0
-      return baseRadius * (0.65 + 0.55 * s); // ~0.65R at ends, ~1.2R in middle
+      return baseRadius * (0.65 + bulge * s); // ~0.65R at ends, ~(0.65+bulge)R in middle
     }
 
     // build rings for body (surface of revolution)
@@ -94,8 +105,8 @@ export function createFishHouseLayer(gl) {
 
     const crownBaseY = y0 + height * 0.97;
     const crownRadius = radiusAt(0.9) * 0.3; // tighter cluster
-    const leafCount = 12;
-    const baseLeafLength = 0.4;
+    const leafCount = params.leafCount;
+    const baseLeafLength = params.leafLength;
 
     for (let L = 0; L < leafCount; L++) {
       const phase = L / leafCount;
@@ -159,31 +170,37 @@ export function createFishHouseLayer(gl) {
 
     return { pos, norm, uv, idx };
   }
-  const mesh = makeHouse();
+  
+  let mesh = makeHouse();
+  let vao = gl.createVertexArray();
+  let posBuffer, normBuffer, uvBuffer, ib;
 
-  const vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);
+  function buildBuffers() {
+    gl.bindVertexArray(vao);
 
-  function bufAttribute(arr, loc, size) {
-    const b = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, b);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
-    return b;
+    function bufAttribute(arr, loc, size, buffer) {
+      const b = buffer || gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+      return b;
+    }
+
+    posBuffer = bufAttribute(mesh.pos, 0, 3, posBuffer);
+    normBuffer = bufAttribute(mesh.norm, 1, 3, normBuffer);
+    uvBuffer = bufAttribute(mesh.uv, 2, 2, uvBuffer);
+
+    if (!ib) ib = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(
+      gl.ELEMENT_ARRAY_BUFFER,
+      new Uint16Array(mesh.idx),
+      gl.STATIC_DRAW
+    );
   }
-
-  bufAttribute(mesh.pos, 0, 3);
-  bufAttribute(mesh.norm, 1, 3);
-  bufAttribute(mesh.uv, 2, 2);
-
-  const ib = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
-  gl.bufferData(
-    gl.ELEMENT_ARRAY_BUFFER,
-    new Uint16Array(mesh.idx),
-    gl.STATIC_DRAW
-  );
+  
+  buildBuffers();
 
   const prog = program(vs, fs, { a_pos: 0, a_normal: 1, a_uv: 2 });
 
@@ -206,6 +223,28 @@ export function createFishHouseLayer(gl) {
       model[12] = x;
       model[13] = y;
       model[14] = z;
+    },
+    setHeight(h) {
+      params.height = h;
+    },
+    setBaseRadius(r) {
+      params.baseRadius = r;
+    },
+    setBulge(b) {
+      params.bulge = b;
+    },
+    setStacks(s) {
+      params.stacks = Math.round(s);
+    },
+    setLeafCount(c) {
+      params.leafCount = Math.round(c);
+    },
+    setLeafLength(l) {
+      params.leafLength = l;
+    },
+    regenerate() {
+      mesh = makeHouse();
+      buildBuffers();
     },
     draw(shared) {
       // --- temporarily disable back-face culling for the house (body + leaves) ---
