@@ -86,14 +86,6 @@ function gfish_body(
     pelvicInfoPacket_out, pelvicShift, pelvicAngle,
     caudalPos_out, 
     headPos_out, headBodySize_out,
-import { CatmullRomSpline3D } from "./SplineVec3.js";
-
-// ---------- GOLDFISH BODY PART GENERATORS. PASS POS/IDX ARRAYS BY REFERENCE FOR UPDATE
-function gfish_body(positions, indices, colors, bodyLength, height, width, arch, 
-    pectoralInfoPacket, pectoralShift, pectoralAngle,
-    pelvicInfoPacket, pelvicShift, pelvicAngle,
-    caudal_pos, 
-    head_pos, head_body_size,
     posCtrlPoints_out,
     scaleCtrlPoints_out  
 ) {
