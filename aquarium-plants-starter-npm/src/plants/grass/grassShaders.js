@@ -53,7 +53,7 @@ void main() {
   float lenCD = length(u_currentDir);
   vec2 lateral = (lenCD < 1e-5) ? vec2(1.0, 0.0) : normalize(vec2(-u_currentDir.y, u_currentDir.x));
 
-  // 🔁 Random ribbon facing: rotate "width" axis around up by i_yaw
+  // Random ribbon facing: rotate "width" axis around up by i_yaw
   vec2 perp = vec2(-lateral.y, lateral.x);              // 90° rotated in XZ
   float c = cos(i_yaw), s = sin(i_yaw);
   vec2 widthDir = normalize(c * lateral + s * perp);    // rotated width axis in XZ

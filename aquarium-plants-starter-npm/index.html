@@ -228,15 +228,27 @@
       <!-- Icon Sidebar -->
       <div id="iconSidebar">
         <div class="icon-btn" data-section="general" title="General">⚙️</div>
+        
         <div class="icon-btn" data-section="fish" title="Goldfish">🐠</div>
+        
         <div class="icon-btn" data-section="grass" title="Grass">🌿</div>
+        
         <div class="icon-btn" data-section="egeria" title="Egeria">🪴</div>
+        
         <div class="icon-btn" data-section="barclaya" title="Barclaya">🍃</div>
+        
         <div class="icon-btn" data-section="coral" title="Coral Reef">🪸</div>
+        
         <div class="icon-btn" data-section="driftwood" title="Driftwood">🪵</div>
+        
         <div class="icon-btn" data-section="boulders" title="Boulders">🪨</div>
+        
         <div class="icon-btn" data-section="fishhouse" title="Fish House">🍍</div>
+        
         <div class="icon-btn" data-section="chest" title="Treasure Chest">💎</div>
+        
+        <div class="icon-btn" data-section="shells" title="Shells">🐚</div>
+        
         <div class="icon-btn" data-section="floor" title="Tank Floor">⬛</div>
         
         <!-- GitHub Link -->
@@ -264,6 +276,7 @@
           <label><input id="showBoulders" type="checkbox" checked /> Show boulders</label>
           <label><input id="showFishHouse" type="checkbox" checked /> Show fish house</label>
           <label><input id="showChest" type="checkbox" checked /> Show treasure chest</label>
+          <label><input id="showShells" type="checkbox" checked /> Show shells</label>
           
           <button class="btn" id="regenerate">Regenerate All</button>
           
@@ -367,7 +380,7 @@
           <input id="flex" type="range" min="0.2" max="3.0" step="0.01" value="1.4" />
           
           <label>Blade height (avg)</label>
-          <input id="height" type="range" min="0.2" max="1.8" step="0.01" value="1.0" />
+          <input id="height" type="range" min="0.1" max="0.5" step="0.01" value="0.3" />
           
           <button class="btn" id="scatter">Regenerate Grass</button>
         </div>
@@ -495,7 +508,27 @@
           <h1>💎 Treasure Chest</h1>
           <p style="font-size: 12px; opacity: 0.8; margin: 8px 0;">Animated treasure chest that spawns bubbles</p>
           
+          <label>Bubbles per Opening</label>
+          <input id="chestBubbles" type="range" min="0" max="30" step="1" value="7" />
+          
+          <label>Rotation (degrees)</label>
+          <input id="chestRotation" type="range" min="0" max="360" step="1" value="0" />
+          
+          <label>Treasure Amount</label>
+          <input id="chestTreasure" type="range" min="0" max="1" step="0.01" value="0.5" />
+          
           <button class="btn" id="chestRegenerate">Regenerate Position</button>
+        </div>
+        
+        <!-- Shells Controls -->
+        <div class="control-section" id="section-shells">
+          <h1>🐚 Shells</h1>
+          <p style="font-size: 12px; opacity: 0.8; margin: 8px 0;">Decorative seashells scattered on the tank floor</p>
+          
+          <h2>Shell Types</h2>
+          <p style="font-size: 11px; opacity: 0.7; margin: 4px 0;">• Scallop shells (fan-shaped)</p>
+          <p style="font-size: 11px; opacity: 0.7; margin: 4px 0;">• Auger shells (spiral)</p>
+          <p style="font-size: 11px; opacity: 0.7; margin: 4px 0;">• Moon shells (round)</p>
         </div>
         
         <!-- Floor Controls -->

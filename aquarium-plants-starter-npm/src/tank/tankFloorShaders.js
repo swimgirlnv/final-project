@@ -21,7 +21,7 @@ uniform int   u_palette;
 uniform vec3  u_sandA;
 uniform vec3  u_sandB;
 
-// New: depth of sand block + tank size (for side normals)
+// Depth of sand block + tank size (for side normals)
 uniform float u_sandDepth;
 uniform vec2  u_tankHalf;
 
@@ -54,7 +54,7 @@ float fbm(vec2 p){
 float hash11(float n){ return fract(sin(n)*43758.5453123); }
 float hash12(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
 
-// HSV-ish hue to RGB (sat≈0.8, val≈1.0)
+// HSV-ish hue to RGB
 vec3 h2rgb(float h){
   float r = abs(h*6.0 - 3.0) - 1.0;
   float g = 2.0 - abs(h*6.0 - 2.0);
@@ -89,7 +89,7 @@ vec3 cellInfo(vec2 p){
 
 // Full height: dunes + gravel domes
 float groundHeight(vec2 p){
-  // macro dunes
+  // macro dunes (soft rolling sand)
   float dunes = (fbm(p * u_scale) - 0.5) * u_amp - 0.03;
 
   // no gravel? just dunes
@@ -100,12 +100,19 @@ float groundHeight(vec2 p){
   vec3 ci = cellInfo(p);
   float d  = ci.x; // distance to nearest pebble center
 
-  // dome shape: 1 in center, 0 by ~0.8
-  float m = 1.0 - smoothstep(0.0, 0.8, d);
+  // dome shape: 1 in center, 0 by ~0.8 (slightly sharper for pebbly look)
+  float m = 1.0 - smoothstep(0.0, 0.7, d);
   m *= u_gravelMix;
 
   float pebble = u_gravelBump * m;
   return dunes + pebble;
+}
+
+// moving caustics for sunny look
+float caustic(vec2 p){
+  float s1 = sin(p.x*9.0  + p.y*6.0  + u_time*1.4);
+  float s2 = sin(p.x*13.0 - p.y*11.0 + u_time*1.9);
+  return 0.5 + 0.5 * (s1 + s2) * 0.3;
 }
 
 void main(){
@@ -145,7 +152,7 @@ void main(){
     world = vec3(p.x, y, p.y);
 
     // side normal points inward based on which wall we’re on
-    vec3 wn = vec3(0.0);
+    vec3 wn;
     float eps = 0.001;
     if (abs(abs(p.x) - u_tankHalf.x) < eps) {
       float s = sign(p.x);
@@ -162,31 +169,69 @@ void main(){
     n = vec3(0.0, -1.0, 0.0);
   }
 
-  // --- color: sand + gravel tint (same as before) ---
+  // micro speckling in the sand
+  float sandNoise1 = hash12(p * 18.37);
+  float sandNoise2 = vnoise(p * 7.0);
+  float sandT = clamp(0.35 + 0.4 * sandNoise1 + 0.25 * sandNoise2, 0.0, 1.0);
+  vec3 sandBase = mix(u_sandA, u_sandB, sandT);
+
+  // cell info for gravel
   vec3 ci  = cellInfo(p);
   float d  = ci.x;
-  float mask = 1.0 - smoothstep(0.0, 0.8, d);
-  mask *= u_gravelMix;
+  vec2 cellId = ci.yz;
+  float cellSeed = hash12(cellId);
 
-  vec3 gravelCol;
+  // how much of each cell is “pebble”
+  float pebbleMask = 1.0 - smoothstep(0.0, 0.7, d);
+  pebbleMask *= u_gravelMix;
+
+  // normalized radius inside pebble
+  float rNorm = clamp(d / 0.7, 0.0, 1.0);
+
+  // core vs rim masks
+  float coreMask = 1.0 - smoothstep(0.0, 0.35, rNorm);                  // dark center
+  float rimMask  = exp(-pow((rNorm - 0.75) / 0.25, 2.0));               // bright rim
+
+  // pick palette per pebble
+  vec3 gravelBase;
   if (u_palette == 1) {
-    float g = 0.45 + 0.45 * hash12(ci.yz);
-    gravelCol = vec3(g) * vec3(1.0, 0.98, 0.96);
+    // grey natural stone with warm variation
+    float g = 0.45 + 0.4 * cellSeed;
+    gravelBase = vec3(g) * vec3(1.0, 0.98, 0.96);
   } else if (u_palette == 2) {
-    float hcol = hash12(ci.yz);
-    gravelCol = h2rgb(hcol) * (0.75 + 0.35 * hash11(hcol * 91.7));
+    // rainbow gravel, slight pastel
+    float hcol = cellSeed;
+    gravelBase = h2rgb(hcol) * (0.75 + 0.35 * hash11(hcol * 91.7));
   } else {
-    float t = 0.7 + 0.3 * hash12(ci.yz + 7.0);
-    gravelCol = mix(u_sandA, u_sandB, t);
+    // “special sand” palette: mostly sand range but pebble-tinted
+    float t = 0.6 + 0.4 * cellSeed;
+    gravelBase = mix(u_sandA, u_sandB, t);
   }
 
+  // modulate core / rim colour
+  vec3 coreCol = gravelBase * vec3(0.65, 0.6, 0.55);
+  vec3 rimCol  = gravelBase * vec3(1.25, 1.15, 1.05);
+  vec3 pebbleCol = gravelBase;
+  pebbleCol = mix(pebbleCol, coreCol, coreMask);
+  pebbleCol = mix(pebbleCol, rimCol,  rimMask);
+
+  // base sand darkened in low areas (fake ambient occlusion)
+  float heightAO = smoothstep(-0.14, 0.10, h);
+  sandBase *= mix(0.70, 1.05, heightAO);
+
+  // Lambert lighting
   vec3 L = normalize(vec3(-0.2, 1.0, 0.3));
-  float ndl = clamp(dot(n, L), 0.0, 1.0);
+  float ndl = clamp(dot(normalize(n), L), 0.0, 1.0);
 
-  vec3 sand = mix(u_sandA, u_sandB, 0.4 + 0.6 * ndl);
-  sand *= 0.95 + 0.1 * smoothstep(-0.10, 0.08, h);
+  // sand lighting
+  vec3 sandLit = sandBase * (0.35 + 0.75 * ndl);
 
-  vec3 baseCol = mix(sand, gravelCol, mask);
+  // mix in pebbles
+  vec3 baseCol = mix(sandLit, pebbleCol, pebbleMask);
+
+  // subtle caustic shimmer
+  float c = caustic(p * 1.6);
+  baseCol *= (0.90 + 0.20 * c);
 
   v_color = baseCol;
 

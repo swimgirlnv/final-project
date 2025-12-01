@@ -61,7 +61,7 @@ export function createWaterSurfaceLayer(gl, opts = {}) {
   }
 
   const prog = program(vs, fs, { a_xz: 0 });
-  const quad = makeQuad();
+  let quad = makeQuad();
 
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj         = U("u_proj");
@@ -87,6 +87,10 @@ export function createWaterSurfaceLayer(gl, opts = {}) {
     setColors(deep, shallow) {
       if (deep)    state.deepColor    = deep;
       if (shallow) state.shallowColor = shallow;
+    },
+
+    regenerate() {
+      quad = makeQuad();
     },
 
     draw(shared) {

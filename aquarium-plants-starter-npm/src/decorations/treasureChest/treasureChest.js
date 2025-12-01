@@ -4,6 +4,9 @@ import { vs, fs } from "./treasureChestShaders.js";
 export function createTreasureChestLayer(gl, opts = {}) {
   const spawnBubble = opts.spawnBubble || (() => {});
   const position = opts.position ? [...opts.position] : [0.6, -0.05, -0.5];
+  let bubbleCount = opts.bubbleCount ?? 7;
+  let rotation = opts.rotation ?? 0; // rotation in radians around Y axis
+  let treasureAmount = opts.treasureAmount ?? 0.5; // 0.0 to 1.0
 
   function compile(type, src) {
     const sh = gl.createShader(type);
@@ -282,10 +285,11 @@ export function createTreasureChestLayer(gl, opts = {}) {
   const tZ0 = z0 + tInsetZ;
   const tZ1 = z1 - tInsetZ;
   const tY0 = yBottom + 0.02;             // just above the real bottom
-  const tY1 = yTopBase * 0.7;             // piles rise into the chest
+  const tY1 = yTopBase * (0.4 + treasureAmount * 0.5); // height varies with amount
 
-  const cellsX = 7;
-  const cellsZ = 4;
+  // Grid density varies with treasureAmount (min 2x2, max 10x6)
+  const cellsX = Math.max(2, Math.floor(2 + treasureAmount * 8));
+  const cellsZ = Math.max(2, Math.floor(2 + treasureAmount * 4));
   const dx = (tX1 - tX0) / cellsX;
   const dz = (tZ1 - tZ0) / cellsZ;
 
@@ -379,10 +383,10 @@ export function createTreasureChestLayer(gl, opts = {}) {
   return mesh;
 }
 
-  const mesh = buildMesh();
+  let mesh = buildMesh();
 
   // ------------- buffers / VAO -----------------
-  const vao = gl.createVertexArray();
+  let vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
 
   function vbuf(data, loc, size) {
@@ -394,19 +398,25 @@ export function createTreasureChestLayer(gl, opts = {}) {
     return b;
   }
 
-  vbuf(mesh.pos,   0, 3);
-  vbuf(mesh.norm,  1, 3);
-  vbuf(mesh.uv,    2, 2);
-  vbuf(mesh.kind,  3, 1);
-  vbuf(mesh.isLid, 4, 1);
+  function rebuildBuffers() {
+    gl.bindVertexArray(vao);
+    
+    vbuf(mesh.pos,   0, 3);
+    vbuf(mesh.norm,  1, 3);
+    vbuf(mesh.uv,    2, 2);
+    vbuf(mesh.kind,  3, 1);
+    vbuf(mesh.isLid, 4, 1);
 
-  const ib = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
-  gl.bufferData(
-    gl.ELEMENT_ARRAY_BUFFER,
-    new Uint16Array(mesh.idx),
-    gl.STATIC_DRAW
-  );
+    const ib = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(
+      gl.ELEMENT_ARRAY_BUFFER,
+      new Uint16Array(mesh.idx),
+      gl.STATIC_DRAW
+    );
+  }
+
+  rebuildBuffers();
 
   const prog = program(vs, fs, {
     a_pos:    0,
@@ -427,13 +437,19 @@ export function createTreasureChestLayer(gl, opts = {}) {
   const u_fogNear   = U("u_fogNear");
   const u_fogFar    = U("u_fogFar");
 
-  // Simple model matrix: translation only
-  const model = new Float32Array([
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    position[0], position[1], position[2], 1,
-  ]);
+  // Function to build model matrix with rotation and translation
+  function buildModelMatrix() {
+    const c = Math.cos(rotation);
+    const s = Math.sin(rotation);
+    return new Float32Array([
+      c, 0, s, 0,
+      0, 1, 0, 0,
+      -s, 0, c, 0,
+      position[0], position[1], position[2], 1,
+    ]);
+  }
+
+  let model = buildModelMatrix();
 
   // -------- animation state --------
   let lidAngle       = 0.0;
@@ -444,15 +460,28 @@ export function createTreasureChestLayer(gl, opts = {}) {
 
   function burstBubbles() {
     const chestMouthY = position[1] + H + LID_H * 0.2;
-    const chestMouthZ = position[2] + 0.5 * D;
+    
+    // The mouth of the chest is at the front (positive Z in local space)
+    // We need to rotate this offset by the chest's rotation
+    const localMouthZ = 0.5 * D; // front of chest in local space
+    
+    // Rotate the mouth position by the chest's rotation
+    const cosRot = Math.cos(rotation);
+    const sinRot = Math.sin(rotation);
 
-    for (let i = 0; i < 7; i++) {
-      const jitterX = (Math.random() - 0.5) * 0.18;
-      const jitterZ = (Math.random() - 0.5) * 0.10;
+    for (let i = 0; i < bubbleCount; i++) {
+      // Random jitter in local space
+      const localJitterX = (Math.random() - 0.5) * 0.18;
+      const localJitterZ = (Math.random() - 0.5) * 0.10;
+      
+      // Apply rotation to the local offsets
+      const rotatedX = localJitterX * cosRot - (localMouthZ + localJitterZ) * sinRot;
+      const rotatedZ = localJitterX * sinRot + (localMouthZ + localJitterZ) * cosRot;
+      
       spawnBubble(
-        position[0] + jitterX,
+        position[0] + rotatedX,
         chestMouthY,
-        chestMouthZ + jitterZ
+        position[2] + rotatedZ
       );
     }
   }
@@ -490,12 +519,25 @@ export function createTreasureChestLayer(gl, opts = {}) {
 
   return {
     setPosition(x, y, z) {
-      model[12] = x;
-      model[13] = y;
-      model[14] = z;
       position[0] = x;
       position[1] = y;
       position[2] = z;
+      model = buildModelMatrix();
+    },
+
+    setBubbleCount(count) {
+      bubbleCount = Math.max(0, Math.floor(count));
+    },
+
+    setRotation(angle) {
+      rotation = angle;
+      model = buildModelMatrix();
+    },
+
+    setTreasureAmount(amount) {
+      treasureAmount = Math.max(0, Math.min(1, amount));
+      mesh = buildMesh();
+      rebuildBuffers();
     },
 
     handleClick, // call this from your mouse/pick logic

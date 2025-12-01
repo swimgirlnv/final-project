@@ -15,6 +15,7 @@ import { createBubbleLayer } from "./decorations/bubbles/bubbles.js";
 import { createTreasureChestLayer } from "./decorations/treasureChest/treasureChest.js";
 import { createWaterSurfaceLayer } from "./tank/water.js";
 import { createTankGlassLayer } from "./tank/glass.js";
+import { createShellLayer } from "./decorations/shells/shells.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -106,6 +107,7 @@ const showWood = document.getElementById("showWood");
 const showBoulders = document.getElementById("showBoulders");
 const showFishHouse = document.getElementById("showFishHouse");
 const showChest = document.getElementById("showChest");
+const showShells = document.getElementById("showShells");
 
 const currentStrength = 0;
 const currentAngle = -3.14;
@@ -155,6 +157,9 @@ const boulderCount = document.getElementById("boulderCount");
 const boulderCountLabel = document.getElementById("boulderCountLabel");
 const boulderRegenerate = document.getElementById("boulderRegenerate");
 const chestRegenerate = document.getElementById("chestRegenerate");
+const chestBubbles = document.getElementById("chestBubbles");
+const chestRotation = document.getElementById("chestRotation");
+const chestTreasure = document.getElementById("chestTreasure");
 
 // fish house controls
 const fishHouseHeight = document.getElementById("fishHouseHeight");
@@ -384,6 +389,7 @@ const gfish = createGoldfish(gl);
 const bubbles = createBubbleLayer(gl);
 const waterSurface = createWaterSurfaceLayer(gl);
 const tankGlass = createTankGlassLayer(gl);
+const shells = createShellLayer(gl);
 
 // Generate random position for treasure chest
 function generateChestPosition() {
@@ -669,6 +675,19 @@ if (chestRegenerate) chestRegenerate.addEventListener("click", () => {
   grass.regenerate();
 });
 
+if (chestBubbles) chestBubbles.addEventListener("input", () => {
+  chestLayer.setBubbleCount(+chestBubbles.value);
+});
+
+if (chestRotation) chestRotation.addEventListener("input", () => {
+  // Convert degrees to radians
+  chestLayer.setRotation((+chestRotation.value) * Math.PI / 180);
+});
+
+if (chestTreasure) chestTreasure.addEventListener("input", () => {
+  chestLayer.setTreasureAmount(+chestTreasure.value);
+});
+
 // Fish house controls
 if (fishHouseHeight)
   fishHouseHeight.addEventListener("input", () => {
@@ -732,6 +751,8 @@ palRainbow?.addEventListener(
 tankSize?.addEventListener("input", () => {
   setTankSize(+tankSize.value);
   floor.regenerate();
+  waterSurface.regenerate();
+  tankGlass.regenerate();
   // Update tank bounds with the new dimensions from tankFloor
   updateTankBounds(TANK_X_HALF, TANK_Z_HALF);
   resetCollisionState();
@@ -743,6 +764,9 @@ tankSize?.addEventListener("input", () => {
   barclaya.regenerate();
   egeria.regenerate();
   grass.regenerate();
+  coral.regenerate();
+  fanCoral.regenerate();
+  staghornCoral.regenerate();
 });
 
 /* ---------- Render loop ---------- */
@@ -831,6 +855,7 @@ let last = performance.now(),
     staghornCoral.draw(shared);
   }
   if (showChest?.checked !== false) chestLayer.draw(shared);
+  if (showShells?.checked !== false) shells.draw(shared);
   bubbles.draw(shared);
   gfish.draw(shared);
   waterSurface.draw(shared);

@@ -145,7 +145,7 @@ export function createTankGlassLayer(gl) {
     a_normal: 1,
   });
 
-  const walls = makeWalls();
+  let walls = makeWalls();
 
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj       = U("u_proj");
@@ -165,6 +165,10 @@ export function createTankGlassLayer(gl) {
   };
 
   return {
+    regenerate() {
+      walls = makeWalls();
+    },
+
     draw(shared) {
       gl.useProgram(prog);
       gl.bindVertexArray(walls.vao);
