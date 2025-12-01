@@ -46,6 +46,15 @@ export function resetCollisionState() {
   placedObjects.length = 0;
 }
 
+/** Clear only objects of a specific type (call before regenerating a single layer). */
+export function clearObjectsByType(type) {
+  for (let i = placedObjects.length - 1; i >= 0; i--) {
+    if (placedObjects[i].type === type) {
+      placedObjects.splice(i, 1);
+    }
+  }
+}
+
 /**
  * Register a solid object so later placements can avoid it.
  * `radius` should roughly match its footprint in XZ.

@@ -58,9 +58,9 @@ void main() {
   float c = cos(i_yaw), s = sin(i_yaw);
   vec2 widthDir = normalize(c * lateral + s * perp);    // rotated width axis in XZ
 
-  const float GENTLE = 0.45;
+  const float GENTLE = 0.15;
   float sway   = sin(phase + t*1.9) * i_amp * u_currentStrength * hinge * GENTLE;
-  float wobble = 0.015 * sin(7.0*t + u_time*1.7 + i_phase*3.1) * hinge;
+  float wobble = 0.008 * sin(7.0*t + u_time*1.7 + i_phase*3.1) * hinge;
 
   // Width with taper to visually pin root
   float baseW   = 0.022 * (1.0 - 0.7*t);

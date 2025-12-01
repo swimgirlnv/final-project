@@ -1,5 +1,5 @@
 import { vs, fs } from "./boulderShader.js";
-import { findValidPosition, registerObject } from "../../sceneCollision.js";
+import { findValidPosition, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 
 export function createBoulderLayer(gl) {
   function compile(type, src) {
@@ -136,6 +136,9 @@ export function createBoulderLayer(gl) {
   }
 
   function scatter() {
+    // Clear only boulder objects from collision registry
+    clearObjectsByType("boulder");
+    
     const d = { offset: [], scale: [], hue: [], count: 0 };
     for (let i = 0; i < state.count; i++) {
       const scale = rand(0.08, 0.28);

@@ -49,7 +49,6 @@ export function createFloorLayer(gl) {
     const xHalf = TANK_X_HALF;
     const zHalf = TANK_Z_HALF;
 
-    // keep your nice resolution
     const NX = 200;
     const NZ = 160;
 

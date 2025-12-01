@@ -1,5 +1,5 @@
 import { vs, fs } from "./grassShaders.js";
-import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
+import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 const TANK = { xHalf: TANK_X_HALF, zHalf: TANK_Z_HALF }; // world half-extents in X/Z
@@ -171,7 +171,7 @@ export function createGrassLayer(gl) {
 
   const state = {
     count: +document.getElementById("plantCount")?.value || 600,
-    avgH: 1.0,
+    avgH: 0.15,
     flex: 1.4,
   };
 
@@ -179,10 +179,13 @@ export function createGrassLayer(gl) {
     return a + Math.random() * (b - a);
   }
 
-  // ---------------------------------------------------------------------------
-  // Scatter with clumped density based on noise
+    // ---------------------------------------------------------------------------
+  // Scatter with clumped density based on noise, but as TUFTS
   // ---------------------------------------------------------------------------
   function scatter() {
+    // Clear only grass objects from collision registry
+    clearObjectsByType("grassTuft");
+    
     const d = {
       base: [],
       height: [],
@@ -192,51 +195,86 @@ export function createGrassLayer(gl) {
       yaw: [],
       count: 0,
     };
-    const grassRadius = 0.015;
 
+    // How many blades per tuft (average)
+    const BLADES_PER_TUFT = 5;
+    const TUFT_RADIUS = 0.04;      // how wide each tuft can spread
+    const grassRadius = 0.015;     // used for collision radius at tuft center
+
+    // interpret state.count as approx number of blades
+    const targetBlades = state.count | 0;
+    const targetTufts = Math.max(1, (targetBlades / BLADES_PER_TUFT) | 0);
+
+    let tuftsMade = 0;
     let attempts = 0;
-    const maxAttempts = state.count * 40;
+    const maxAttempts = targetTufts * 40;
 
     // noise → density controls
-    const FREQ = 0.6; // lower = bigger clumps, higher = smaller/patchier
-    const BASE_DENSITY = 0.3; // minimum chance to place grass everywhere
-    const CLUMP_STRENGTH = 0.55; // how much noise boosts density (0..1)
+    const FREQ = 1.2;          // lower = bigger clumps, higher = smaller/patchier
+    const BASE_DENSITY = 0.15; // minimum chance to place grass everywhere
+    const CLUMP_STRENGTH = 0.75; // how much noise boosts density (0..1)
 
-    while (d.count < state.count && attempts < maxAttempts) {
+    while (tuftsMade < targetTufts && attempts < maxAttempts) {
       attempts++;
 
       // sample uniformly over full floor bounds
       const x = (Math.random() * 2 - 1) * TANK_X_HALF;
       const z = (Math.random() * 2 - 1) * TANK_Z_HALF;
 
-      // let plants get much closer to the walls:
-      // use tiny padding (or comment this out if you want *all* the way to the edge)
+      // let plants get close to walls, but still inside tank
       if (!isInsideTank(x, z, 0.001)) continue;
 
-      // still avoid big objects / holes
-      if (checkCollision2D(x, z, grassRadius, 0.0)) continue;
-      registerObject(x, z, grassRadius, "grass");
+      // avoid big objects / holes using a slightly bigger radius for the tuft
+      if (checkCollision2D(x, z, grassRadius * 2.5, 0.0)) continue;
 
-      // noise in [0,1]
+      // noise in [0,1] for tuft center
       const n = valueNoise2D(x * FREQ, z * FREQ);
 
-      // probability of placing grass here
+      // probability of placing a tuft here
       const p = BASE_DENSITY + CLUMP_STRENGTH * (n * n);
       if (Math.random() > p) continue;
 
-      // place a blade
-      d.base.push(x, z);
+      // check passed: we place an entire TUFT here
+      tuftsMade++;
 
-      const hBase = rand(0.6 * state.avgH, 1.5 * state.avgH);
-      const heightBoost = 0.35 * (n - 0.5);
-      d.height.push(Math.max(0.3, hBase + heightBoost));
+      // register tuft as one object (so we don't block ourselves per blade)
+      registerObject(x, z, grassRadius * 2.5, "grassTuft");
 
-      d.phase.push(Math.random() * Math.PI * 2);
-      d.amp.push(rand(0.05, 0.2));
-      d.hue.push(rand(0.26, 0.34));
-      d.yaw.push(rand(0, Math.PI * 2));
+      // how many blades in this tuft (a bit of variation)
+      const bladesHere = Math.max(
+        3,
+        Math.min(
+          BLADES_PER_TUFT + (Math.random() < 0.5 ? 1 : -1),
+          BLADES_PER_TUFT + 2
+        )
+      );
 
-      d.count++;
+      for (let k = 0; k < bladesHere && d.count < targetBlades; k++) {
+        // small radial offset around tuft center for this blade
+        const ang = Math.random() * Math.PI * 2.0;
+        const r = Math.random() * TUFT_RADIUS;
+        const bx = x + Math.cos(ang) * r;
+        const bz = z + Math.sin(ang) * r;
+
+        d.base.push(bx, bz);
+
+        // height: base on avgH + small variation + noise
+        const hBase = rand(0.6 * state.avgH, 1.5 * state.avgH);
+        const heightBoost = 0.35 * (n - 0.5); // tuft inherits same noise
+        d.height.push(Math.max(0.1, hBase + heightBoost));
+
+        // phase + sway amplitude per blade
+        d.phase.push(Math.random() * Math.PI * 2);
+        d.amp.push(rand(0.05, 0.2));
+
+        // hue: keep within soft green range but vary slightly per blade
+        d.hue.push(rand(0.26, 0.34));
+
+        // yaw: random orientation, but tuft still feels bushy
+        d.yaw.push(rand(0, Math.PI * 2));
+
+        d.count++;
+      }
     }
 
     inst.update(d);

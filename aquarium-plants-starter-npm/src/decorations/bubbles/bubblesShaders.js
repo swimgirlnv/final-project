@@ -105,8 +105,6 @@ void main() {
   float fog = smoothstep(u_fogNear, u_fogFar, v_camDist);
   col = mix(col, u_fogColor, fog);
 
-  // keep alpha = 1.0 so it works even if blending is off.
-  // If you turn on blending for bubbles, you can try alpha = mix(0.35, 0.9, fresnel)
   outColor = vec4(col, 1.0);
 }
 `;

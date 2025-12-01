@@ -5,6 +5,7 @@ import {
   checkCollision2D,
   isInsideTank,
   registerObject,
+  clearObjectsByType,
 } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
@@ -235,8 +236,6 @@ export function createEgeriaLayer(gl) {
   const u_currentStrength = U("u_currentStrength"),
     u_currentDir = U("u_currentDir"),
     u_res = U("u_res");
-  // extra width scaler (multiply width0 in VS): add this uniform to your VS if you don’t have it yet
-  // Just add:  `uniform float u_leafWidthScale;` and after computing width0 do `float width0 = ... * u_leafWidthScale;`
   const u_leafWidthScale = U("u_leafWidthScale");
 
   const u_fogColor = U("u_fogColor");
@@ -251,6 +250,9 @@ export function createEgeriaLayer(gl) {
   };
 
   function regenerate() {
+    // Clear only egeria objects from collision registry
+    clearObjectsByType("egeria");
+    
     const data = {
       originXZ: [],
       originYLen: [],

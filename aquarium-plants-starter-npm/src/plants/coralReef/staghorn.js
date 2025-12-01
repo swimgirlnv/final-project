@@ -1,5 +1,5 @@
 import { vs, fs } from "./staghornShaders.js";
-import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
+import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 export function createStaghornCoralLayer(gl) {
@@ -159,6 +159,9 @@ export function createStaghornCoralLayer(gl) {
   }
 
   function scatter() {
+    // Clear only staghorn objects from collision registry
+    clearObjectsByType("staghorn");
+    
     const data = {
       base: [],
       axis: [],

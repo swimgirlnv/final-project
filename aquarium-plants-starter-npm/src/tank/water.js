@@ -125,7 +125,6 @@ export function createWaterSurfaceLayer(gl, opts = {}) {
         state.shallowColor[2]
       );
 
-      // reuse your global fog so the surface fades nicely in the distance
       gl.uniform3f(
         u_fogColor,
         shared.fogColor[0],

@@ -42,7 +42,6 @@ uniform vec3  u_ambient;
 uniform vec3  u_fogColor;
 uniform float u_fogNear, u_fogFar;
 
-// NEW: floor params (mirror your floor layer)
 uniform float u_floorAmp;
 uniform float u_floorScale;
 uniform float u_floorYOffset;
@@ -92,7 +91,6 @@ void main(){
   float cavity = (1.0 - grain) * 0.35 + pow(1.0 - abs(dot(N, L)), 2.0) * 0.20;
   vec3 lit = albedo * (u_ambient + wrap*0.9) * (1.0 - cavity*0.35);
 
-  // --- Sand height & bury blend (matches your floor)
   float sandH = (fbm(v_posW.xz * u_floorScale) - 0.5) * u_floorAmp + u_floorYOffset;
   float bury  = smoothstep(0.03, -0.01, v_posW.y - sandH); // >0 when inside sand
   // darken + slight desaturation when buried

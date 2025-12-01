@@ -60,6 +60,7 @@
       
       .github-btn {
         margin-top: auto;
+        margin-bottom: 16px;
         width: 44px;
         height: 44px;
         background: #24292e;
@@ -373,14 +374,14 @@
         <div class="control-section" id="section-grass">
           <h1>🌿 Grass</h1>
           
-          <label>Blade count: <span id="plantCountLabel"></span></label>
+          <label>Blade count: <span id="plantCountLabel">200</span></label>
           <input id="plantCount" type="range" min="10" max="600" value="200" />
           
           <label>Tip flexibility</label>
           <input id="flex" type="range" min="0.2" max="3.0" step="0.01" value="1.4" />
           
           <label>Blade height (avg)</label>
-          <input id="height" type="range" min="0.1" max="0.5" step="0.01" value="0.3" />
+          <input id="height" type="range" min="0.05" max="0.25" step="0.01" value="0.15" />
           
           <button class="btn" id="scatter">Regenerate Grass</button>
         </div>
@@ -389,13 +390,13 @@
         <div class="control-section" id="section-egeria">
           <h1>🪴 Egeria Densa</h1>
           
-          <label>Stem count</label>
+          <label>Stem count: <span id="egeriaCountLabel">120</span></label>
           <input id="egeriaCount" type="range" min="20" max="400" value="120" />
           
           <label>Leaf width (scale)</label>
           <input id="egeriaLeafWidth" type="range" min="0.6" max="2.0" step="0.01" value="1.00" />
           
-          <label>Stem nodes</label>
+          <label>Stem nodes: <span id="egeriaNodesLabel">12</span></label>
           <input id="egeriaNodes" type="range" min="8" max="20" value="12" />
           
           <label>Branch chance</label>
@@ -406,6 +407,23 @@
         <div class="control-section" id="section-barclaya">
           <h1>🍃 Barclaya</h1>
           <p style="font-size: 12px; opacity: 0.8; margin: 8px 0;">Red-brown aquatic plant with large leaves</p>
+          
+          <label>Plant Count: <span id="barclayaCountLabel">18</span></label>
+          <input id="barclayaCount" type="range" min="5" max="40" step="1" value="18" />
+          
+          <label>Min Leaves per Rosette: <span id="barclayaMinLeavesLabel">5</span></label>
+          <input id="barclayaMinLeaves" type="range" min="3" max="10" step="1" value="5" />
+          
+          <label>Max Leaves per Rosette: <span id="barclayaMaxLeavesLabel">11</span></label>
+          <input id="barclayaMaxLeaves" type="range" min="6" max="20" step="1" value="11" />
+          
+          <label>Red Leaf Probability</label>
+          <input id="barclayaRedProb" type="range" min="0" max="1" step="0.05" value="0.35" />
+          
+          <label>Edge Ripple Frequency: <span id="barclayaUndulFreqLabel">22</span></label>
+          <input id="barclayaUndulFreq" type="range" min="10" max="40" step="1" value="22" />
+          
+          <button class="btn" id="barclayaRegenerate">Regenerate Barclaya</button>
         </div>
         
         <!-- Coral Reef Controls -->
@@ -427,10 +445,10 @@
           <input id="fanCount" type="range" min="3" max="20" value="10" />
           
           <h2>Staghorn Coral</h2>
-          <label>Colonies</label>
+          <label>Colonies: <span id="staghornColoniesLabel">6</span></label>
           <input id="staghornColonies" type="range" min="2" max="12" value="6" />
           
-          <label>Branches per Colony</label>
+          <label>Branches per Colony: <span id="staghornBranchesLabel">10</span></label>
           <input id="staghornBranches" type="range" min="5" max="20" value="10" />
           
           <button class="btn" id="coralRegenerate">Regenerate All Coral</button>
@@ -440,10 +458,10 @@
         <div class="control-section" id="section-driftwood">
           <h1>🪵 Driftwood</h1>
           
-          <label>Pieces</label>
+          <label>Pieces: <span id="woodPiecesLabel">3</span></label>
           <input id="woodPieces" type="range" min="1" max="6" value="3" />
           
-          <label>Branches per piece</label>
+          <label>Branches per piece: <span id="woodBranchesLabel">3</span></label>
           <input id="woodBranches" type="range" min="1" max="8" value="3" />
           
           <label>Gnarliness</label>
@@ -490,11 +508,11 @@
           <label>Bulge (Middle Width)</label>
           <input id="fishHouseBulge" type="range" min="0.0" max="1.0" step="0.05" value="0.55" />
           
-          <label>Detail (Stacks)</label>
+          <label>Detail (Stacks): <span id="fishHouseStacksLabel">20</span></label>
           <input id="fishHouseStacks" type="range" min="10" max="40" step="2" value="20" />
           
           <h2>Crown Leaves</h2>
-          <label>Leaf Count</label>
+          <label>Leaf Count: <span id="fishHouseLeafCountLabel">12</span></label>
           <input id="fishHouseLeafCount" type="range" min="6" max="24" step="1" value="12" />
           
           <label>Leaf Length</label>
@@ -508,10 +526,10 @@
           <h1>💎 Treasure Chest</h1>
           <p style="font-size: 12px; opacity: 0.8; margin: 8px 0;">Animated treasure chest that spawns bubbles</p>
           
-          <label>Bubbles per Opening</label>
+          <label>Bubbles per Opening: <span id="chestBubblesLabel">7</span></label>
           <input id="chestBubbles" type="range" min="0" max="30" step="1" value="7" />
           
-          <label>Rotation (degrees)</label>
+          <label>Rotation: <span id="chestRotationLabel">0</span>°</label>
           <input id="chestRotation" type="range" min="0" max="360" step="1" value="0" />
           
           <label>Treasure Amount</label>

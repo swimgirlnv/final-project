@@ -1,7 +1,12 @@
 // src/main.js
 import { createEgeriaLayer } from "./plants/egeriaDensa/egeriaDensa.js";
 import { createGrassLayer } from "./plants/grass/grass.js";
-import { createFloorLayer, setTankSize, TANK_X_HALF, TANK_Z_HALF } from "./tank/tankFloor.js";
+import {
+  createFloorLayer,
+  setTankSize,
+  TANK_X_HALF,
+  TANK_Z_HALF,
+} from "./tank/tankFloor.js";
 import { createBarclayaLayer } from "./plants/barclayaLongifolia/barclayaLongifolia.js";
 import { createCoralReefLayer } from "./plants/coralReef/coralReef.js";
 import { createFanCoralLayer } from "./plants/coralReef/fan.js";
@@ -9,7 +14,13 @@ import { createStaghornCoralLayer } from "./plants/coralReef/staghorn.js";
 import { createDriftwoodLayer } from "./decorations/driftwood/driftwood.js";
 import { createBoulderLayer } from "./decorations/boulder/boulder.js";
 import { createFishHouseLayer } from "./decorations/fishHouse/fishHouse.js";
-import { resetCollisionState, updateTankBounds, findValidPosition, registerObject, TANK_BOUNDS } from "./sceneCollision.js";
+import {
+  resetCollisionState,
+  updateTankBounds,
+  findValidPosition,
+  registerObject,
+  TANK_BOUNDS,
+} from "./sceneCollision.js";
 import { createGoldfish, regenerateGoldfishGeometry } from "./fish/goldfish.js";
 import { createBubbleLayer } from "./decorations/bubbles/bubbles.js";
 import { createTreasureChestLayer } from "./decorations/treasureChest/treasureChest.js";
@@ -111,6 +122,7 @@ const showShells = document.getElementById("showShells");
 
 const currentStrength = 0;
 const currentAngle = -3.14;
+const FOV_DEG = 45;
 
 // grass controls
 const plantCount = document.getElementById("plantCount"); // not actually plant count, changes everything put in main settings
@@ -120,9 +132,23 @@ const heightAvg = document.getElementById("height");
 
 // egeria controls
 const egCount = document.getElementById("egeriaCount");
+const egeriaCountLabel = document.getElementById("egeriaCountLabel");
 const egWidth = document.getElementById("egeriaLeafWidth");
 const egNodes = document.getElementById("egeriaNodes");
+const egeriaNodesLabel = document.getElementById("egeriaNodesLabel");
 const egBranch = document.getElementById("egeriaBranch");
+
+// barclaya controls
+const barclayaCount = document.getElementById("barclayaCount");
+const barclayaCountLabel = document.getElementById("barclayaCountLabel");
+const barclayaMinLeaves = document.getElementById("barclayaMinLeaves");
+const barclayaMinLeavesLabel = document.getElementById("barclayaMinLeavesLabel");
+const barclayaMaxLeaves = document.getElementById("barclayaMaxLeaves");
+const barclayaMaxLeavesLabel = document.getElementById("barclayaMaxLeavesLabel");
+const barclayaRedProb = document.getElementById("barclayaRedProb");
+const barclayaUndulFreq = document.getElementById("barclayaUndulFreq");
+const barclayaUndulFreqLabel = document.getElementById("barclayaUndulFreqLabel");
+const barclayaRegenerate = document.getElementById("barclayaRegenerate");
 
 const scatterBtn = document.getElementById("scatter");
 const regenBtn = document.getElementById("regenerate");
@@ -140,11 +166,15 @@ const fanCountLabel = document.getElementById("fanCountLabel");
 
 // staghorn coral controls
 const staghornColonies = document.getElementById("staghornColonies");
+const staghornColoniesLabel = document.getElementById("staghornColoniesLabel");
 const staghornBranches = document.getElementById("staghornBranches");
+const staghornBranchesLabel = document.getElementById("staghornBranchesLabel");
 
 // wood controls
 const woodPieces = document.getElementById("woodPieces");
+const woodPiecesLabel = document.getElementById("woodPiecesLabel");
 const woodBranches = document.getElementById("woodBranches");
+const woodBranchesLabel = document.getElementById("woodBranchesLabel");
 const woodGnarl = document.getElementById("woodGnarl");
 const woodTwist = document.getElementById("woodTwist");
 const woodDetail = document.getElementById("woodDetail");
@@ -158,7 +188,9 @@ const boulderCountLabel = document.getElementById("boulderCountLabel");
 const boulderRegenerate = document.getElementById("boulderRegenerate");
 const chestRegenerate = document.getElementById("chestRegenerate");
 const chestBubbles = document.getElementById("chestBubbles");
+const chestBubblesLabel = document.getElementById("chestBubblesLabel");
 const chestRotation = document.getElementById("chestRotation");
+const chestRotationLabel = document.getElementById("chestRotationLabel");
 const chestTreasure = document.getElementById("chestTreasure");
 
 // fish house controls
@@ -166,7 +198,9 @@ const fishHouseHeight = document.getElementById("fishHouseHeight");
 const fishHouseRadius = document.getElementById("fishHouseRadius");
 const fishHouseBulge = document.getElementById("fishHouseBulge");
 const fishHouseStacks = document.getElementById("fishHouseStacks");
+const fishHouseStacksLabel = document.getElementById("fishHouseStacksLabel");
 const fishHouseLeafCount = document.getElementById("fishHouseLeafCount");
+const fishHouseLeafCountLabel = document.getElementById("fishHouseLeafCountLabel");
 const fishHouseLeafLength = document.getElementById("fishHouseLeafLength");
 const fishHouseRegenerate = document.getElementById("fishHouseRegenerate");
 
@@ -208,84 +242,105 @@ const afinShift = document.getElementById("afinShift");
 
 // Function to read the currently checked value from a radio group
 const getRadioValue = (group) => {
-    for (const radio of group) {
-        if (radio.checked) {
-            return radio.value;
-        }
+  for (const radio of group) {
+    if (radio.checked) {
+      return radio.value;
     }
-    // Return a default or the first value if nothing is checked (safer for initialization)
-    return group[0] ? group[0].value : null; 
+  }
+  // Return a default or the first value if nothing is checked (safer for initialization)
+  return group[0] ? group[0].value : null;
 };
 
 function readGoldfishParams() {
-    return {
-        // body params (float values from sliders)
-        bodyLength: parseFloat(bodyLength.value),
-        bodyHeight: parseFloat(bodyHeight.value),
-        bodyWidth: parseFloat(bodyWidth.value),
-        arch: parseFloat(arch.value),
+  return {
+    // body params (float values from sliders)
+    bodyLength: parseFloat(bodyLength.value),
+    bodyHeight: parseFloat(bodyHeight.value),
+    bodyWidth: parseFloat(bodyWidth.value),
+    arch: parseFloat(arch.value),
 
-        // head params
-        headSize: { x: parseFloat(headSize.value), y: parseFloat(headSize.value), z: parseFloat(headSize.value) }, // Assuming headSize slider affects both X and Y equally for now
-        mouthTilt: parseFloat(mouthTilt.value),
-        eyeSize: parseFloat(eyeSize.value),
-        
-        // caudal params
-        caudalLength: parseFloat(caudalLength.value),
-        caudalWidth: parseFloat(caudalWidth.value),
-        caudalCurve: parseFloat(caudalCurve.value),
-        
-        // dorsal params
-        dorsalLength: parseFloat(dorsalLength.value),
-        dorsalWidth: parseFloat(dorsalWidth.value),
-        dorsalShift: parseFloat(dorsalShift.value),
-        
-        // pelvic params
-        pelvicLength: parseFloat(pelvicLength.value),
-        pelvicWidth: parseFloat(pelvicWidth.value),
-        pelvicShift: parseFloat(pelvicShift.value),
-        pelvicAngle: parseFloat(pelvicAngle.value),
-        
-        // pectoral params
-        pectoralLength: parseFloat(pectoralLength.value),
-        pectoralWidth: parseFloat(pectoralWidth.value),
-        pectoralShift: parseFloat(pectoralShift.value),
-        pectoralAngle: parseFloat(pectoralAngle.value),
-        
-        // afin params
-        afinLength: parseFloat(afinLength.value),
-        afinWidth: parseFloat(afinWidth.value),
-        afinShift: parseFloat(afinShift.value)
-    };
+    // head params
+    headSize: {
+      x: parseFloat(headSize.value),
+      y: parseFloat(headSize.value),
+      z: parseFloat(headSize.value),
+    }, // Assuming headSize slider affects both X and Y equally for now
+    mouthTilt: parseFloat(mouthTilt.value),
+    eyeSize: parseFloat(eyeSize.value),
+
+    // caudal params
+    caudalLength: parseFloat(caudalLength.value),
+    caudalWidth: parseFloat(caudalWidth.value),
+    caudalCurve: parseFloat(caudalCurve.value),
+
+    // dorsal params
+    dorsalLength: parseFloat(dorsalLength.value),
+    dorsalWidth: parseFloat(dorsalWidth.value),
+    dorsalShift: parseFloat(dorsalShift.value),
+
+    // pelvic params
+    pelvicLength: parseFloat(pelvicLength.value),
+    pelvicWidth: parseFloat(pelvicWidth.value),
+    pelvicShift: parseFloat(pelvicShift.value),
+    pelvicAngle: parseFloat(pelvicAngle.value),
+
+    // pectoral params
+    pectoralLength: parseFloat(pectoralLength.value),
+    pectoralWidth: parseFloat(pectoralWidth.value),
+    pectoralShift: parseFloat(pectoralShift.value),
+    pectoralAngle: parseFloat(pectoralAngle.value),
+
+    // afin params
+    afinLength: parseFloat(afinLength.value),
+    afinWidth: parseFloat(afinWidth.value),
+    afinShift: parseFloat(afinShift.value),
+  };
 }
 
 function regenerateGoldfish() {
-    const params = readGoldfishParams();
-    regenerateGoldfishGeometry(gl, gfish.geometry, params);
+  const params = readGoldfishParams();
+  regenerateGoldfishGeometry(gl, gfish.geometry, params);
 }
 
 /**
  * Wires up all goldfish UI elements to the regeneration function.
  */
 function initGoldfishUI() {
-    // 1. Sliders (Input event fires continuously while dragging)
-    const sliders = [
-        bodyLength, bodyHeight, bodyWidth, arch,
-        headSize, mouthTilt, eyeSize,
-        caudalLength, caudalWidth, caudalCurve,
-        dorsalLength, dorsalWidth, dorsalShift,
-        pelvicLength, pelvicWidth, pelvicShift, pelvicAngle,
-        pectoralLength, pectoralWidth, pectoralShift, pectoralAngle,
-        afinLength, afinWidth, afinShift
-    ];
-    sliders.forEach(slider => {
-        if (slider) {
-            slider.addEventListener("input", regenerateGoldfish);
-        }
-    });
+  // 1. Sliders (Input event fires continuously while dragging)
+  const sliders = [
+    bodyLength,
+    bodyHeight,
+    bodyWidth,
+    arch,
+    headSize,
+    mouthTilt,
+    eyeSize,
+    caudalLength,
+    caudalWidth,
+    caudalCurve,
+    dorsalLength,
+    dorsalWidth,
+    dorsalShift,
+    pelvicLength,
+    pelvicWidth,
+    pelvicShift,
+    pelvicAngle,
+    pectoralLength,
+    pectoralWidth,
+    pectoralShift,
+    pectoralAngle,
+    afinLength,
+    afinWidth,
+    afinShift,
+  ];
+  sliders.forEach((slider) => {
+    if (slider) {
+      slider.addEventListener("input", regenerateGoldfish);
+    }
+  });
 
-    // 2. Radio buttons (Change event fires when a new one is selected)
-    /*const radioGroups = [eyeTypeGroup, caudalTypeGroup, dorsalTypeGroup, afinTypeGroup];
+  // 2. Radio buttons (Change event fires when a new one is selected)
+  /*const radioGroups = [eyeTypeGroup, caudalTypeGroup, dorsalTypeGroup, afinTypeGroup];
     radioGroups.forEach(group => {
         // group is a NodeList/HTMLCollection, we need to iterate over its elements
         Array.from(group).forEach(radio => {
@@ -298,6 +353,20 @@ function initGoldfishUI() {
 
 // Initialize the goldfish UI handlers immediately
 initGoldfishUI();
+
+let clickStartX = 0;
+let clickStartY = 0;
+
+let interactMode = false;
+
+window.addEventListener("keydown", (e) => {
+  // press "i" to toggle interaction mode
+  if (e.key === "i" || e.key === "I") {
+    interactMode = !interactMode;
+    console.log("Interact mode:", interactMode ? "ON" : "OFF");
+  }
+});
+
 
 /* ---------- Orbit camera ---------- */
 const cam = {
@@ -334,6 +403,8 @@ canvas.addEventListener("pointerdown", (e) => {
   isDragging = true;
   lastX = e.clientX;
   lastY = e.clientY;
+  clickStartX = e.clientX;
+  clickStartY = e.clientY;
   canvas.setPointerCapture(e.pointerId);
   canvas.style.cursor = "grabbing";
 });
@@ -350,6 +421,30 @@ canvas.addEventListener("pointerup", (e) => {
   isDragging = false;
   canvas.releasePointerCapture(e.pointerId);
   canvas.style.cursor = "grab";
+
+  const dx = e.clientX - clickStartX;
+  const dy = e.clientY - clickStartY;
+  const dist = Math.hypot(dx, dy);
+
+  const hasModifier =
+    e.ctrlKey || e.metaKey || e.shiftKey || e.altKey;
+  const allowInteraction = hasModifier || interactMode;
+
+  // If it's a small click *and* interaction is allowed, treat as scene click
+  if (dist < 5 && allowInteraction && lastShared) {
+    const rect = canvas.getBoundingClientRect();
+    // convert to drawingBuffer pixel coords
+    const px =
+      ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const py =
+      ((e.clientY - rect.top) / rect.height) * canvas.height;
+
+    const ray = makeRayFromCamera(px, py, lastShared, canvas);
+    const hit = rayPlaneY(ray.origin, ray.dir, lastShared.floorYOffset);
+    if (hit) {
+      handleWorldClick(hit);
+    }
+  }
 });
 canvas.addEventListener(
   "wheel",
@@ -403,8 +498,10 @@ function generateChestPosition() {
   return [TANK_BOUNDS.xMax * 0.6, -0.05, TANK_BOUNDS.zMax * 0.3];
 }
 
+const chestPos = generateChestPosition();
+
 const chestLayer = createTreasureChestLayer(gl, {
-  position: generateChestPosition(),
+  position: chestPos,
   spawnBubble: bubbles.spawnBubble,
 });
 const FOG = { color: [0.02, 0.07, 0.13], near: 2.0, far: 5.5 };
@@ -429,15 +526,17 @@ function updateFanCountLabel() {
 }
 updateFanCountLabel();
 
+function updateBoulderCountLabel() {
+  if (boulderCountLabel && boulderCount)
+    boulderCountLabel.textContent = String(boulderCount.value);
+}
+updateBoulderCountLabel();
+updateFanCountLabel();
+
 if (plantCount)
   plantCount.addEventListener("input", () => {
     grass.setCount(+plantCount.value);
     updateCountLabel();
-    resetCollisionState();
-    driftwood.regenerate();
-    boulders.regenerate();
-    barclaya.regenerate();
-    egeria.regenerate();
     grass.regenerate();
   });
 if (flex) flex.addEventListener("input", () => grass.setFlex(+flex.value));
@@ -454,13 +553,9 @@ if (heightAvg)
 
 if (egCount)
   egCount.addEventListener("input", () => {
+    if (egeriaCountLabel) egeriaCountLabel.textContent = String(egCount.value);
     egeria.setCount(+egCount.value);
-    resetCollisionState();
-    driftwood.regenerate();
-    boulders.regenerate();
-    barclaya.regenerate();
     egeria.regenerate();
-    grass.regenerate();
   });
 if (egWidth)
   egWidth.addEventListener("input", () =>
@@ -468,6 +563,7 @@ if (egWidth)
   );
 if (egNodes)
   egNodes.addEventListener("input", () => {
+    if (egeriaNodesLabel) egeriaNodesLabel.textContent = String(egNodes.value);
     egeria.setNodes(+egNodes.value);
     resetCollisionState();
     driftwood.regenerate();
@@ -487,18 +583,48 @@ if (egBranch)
     grass.regenerate();
   });
 
+// Barclaya controls
+if (barclayaCount)
+  barclayaCount.addEventListener("input", () => {
+    if (barclayaCountLabel) barclayaCountLabel.textContent = String(barclayaCount.value);
+    barclaya.setPlantCount(+barclayaCount.value);
+    barclaya.regenerate();
+  });
+if (barclayaMinLeaves)
+  barclayaMinLeaves.addEventListener("input", () => {
+    if (barclayaMinLeavesLabel) barclayaMinLeavesLabel.textContent = String(barclayaMinLeaves.value);
+    barclaya.setMinLeaves(+barclayaMinLeaves.value);
+  });
+if (barclayaMaxLeaves)
+  barclayaMaxLeaves.addEventListener("input", () => {
+    if (barclayaMaxLeavesLabel) barclayaMaxLeavesLabel.textContent = String(barclayaMaxLeaves.value);
+    barclaya.setMaxLeaves(+barclayaMaxLeaves.value);
+  });
+if (barclayaRedProb)
+  barclayaRedProb.addEventListener("input", () => {
+    barclaya.setRedProbability(+barclayaRedProb.value);
+  });
+if (barclayaUndulFreq)
+  barclayaUndulFreq.addEventListener("input", () => {
+    if (barclayaUndulFreqLabel) barclayaUndulFreqLabel.textContent = String(barclayaUndulFreq.value);
+    barclaya.setUndulFreq(+barclayaUndulFreq.value);
+  });
+if (barclayaRegenerate)
+  barclayaRegenerate.addEventListener("click", () => {
+    resetCollisionState();
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
+    grass.regenerate();
+  });
+
 // Coral controls
 if (coralCount)
   coralCount.addEventListener("input", () => {
     coral.setCount(+coralCount.value);
     updateCoralCountLabel();
-    resetCollisionState();
-    driftwood.regenerate();
-    boulders.regenerate();
-    barclaya.regenerate();
     coral.regenerate();
-    egeria.regenerate();
-    grass.regenerate();
   });
 if (coralMinRadius)
   coralMinRadius.addEventListener("input", () => {
@@ -526,44 +652,22 @@ if (fanCount)
   fanCount.addEventListener("input", () => {
     fanCoral.setFanCount(+fanCount.value);
     updateFanCountLabel();
-    resetCollisionState();
-    driftwood.regenerate();
-    boulders.regenerate();
-    barclaya.regenerate();
-    egeria.regenerate();
-    coral.regenerate();
     fanCoral.regenerate();
-    staghornCoral.regenerate();
-    grass.regenerate();
   });
 
 // Staghorn coral controls
 if (staghornColonies)
   staghornColonies.addEventListener("input", () => {
+    if (staghornColoniesLabel) staghornColoniesLabel.textContent = String(staghornColonies.value);
     staghornCoral.setColonies(+staghornColonies.value);
-    resetCollisionState();
-    driftwood.regenerate();
-    boulders.regenerate();
-    barclaya.regenerate();
-    egeria.regenerate();
-    coral.regenerate();
-    fanCoral.regenerate();
     staghornCoral.regenerate();
-    grass.regenerate();
   });
 
 if (staghornBranches)
   staghornBranches.addEventListener("input", () => {
+    if (staghornBranchesLabel) staghornBranchesLabel.textContent = String(staghornBranches.value);
     staghornCoral.setBranchesPerColony(+staghornBranches.value);
-    resetCollisionState();
-    driftwood.regenerate();
-    boulders.regenerate();
-    barclaya.regenerate();
-    egeria.regenerate();
-    coral.regenerate();
-    fanCoral.regenerate();
     staghornCoral.regenerate();
-    grass.regenerate();
   });
 
 if (scatterBtn)
@@ -580,6 +684,9 @@ if (regenBtn)
   regenBtn.addEventListener("click", () => {
     resetCollisionState();
     const newChestPos = generateChestPosition();
+    chestPos[0] = newChestPos[0];
+    chestPos[1] = newChestPos[1];
+    chestPos[2] = newChestPos[2];
     chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
     driftwood.regenerate();
     boulders.regenerate();
@@ -590,6 +697,7 @@ if (regenBtn)
   });
 
 woodPieces?.addEventListener("input", () => {
+  if (woodPiecesLabel) woodPiecesLabel.textContent = String(woodPieces.value);
   driftwood.setPieces(+woodPieces.value);
   resetCollisionState();
   driftwood.regenerate();
@@ -599,6 +707,7 @@ woodPieces?.addEventListener("input", () => {
   grass.regenerate();
 });
 woodBranches?.addEventListener("input", () => {
+  if (woodBranchesLabel) woodBranchesLabel.textContent = String(woodBranches.value);
   driftwood.setBranches(+woodBranches.value);
   resetCollisionState();
   driftwood.regenerate();
@@ -648,6 +757,10 @@ if (boulderCount)
   boulderCount.addEventListener("input", () => {
     boulderCountLabel.textContent = String(boulderCount.value);
     boulders.setCount(+boulderCount.value);
+    boulders.regenerate();
+  });
+if (boulderRegenerate)
+  boulderRegenerate.addEventListener("click", () => {
     resetCollisionState();
     driftwood.regenerate();
     boulders.regenerate();
@@ -655,38 +768,39 @@ if (boulderCount)
     egeria.regenerate();
     grass.regenerate();
   });
-if (boulderRegenerate) boulderRegenerate.addEventListener("click", () => {
-  resetCollisionState();
-  driftwood.regenerate();
-  boulders.regenerate();
-  barclaya.regenerate();
-  egeria.regenerate();
-  grass.regenerate();
-});
 
-if (chestRegenerate) chestRegenerate.addEventListener("click", () => {
-  resetCollisionState();
-  const newChestPos = generateChestPosition();
-  chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
-  driftwood.regenerate();
-  boulders.regenerate();
-  barclaya.regenerate();
-  egeria.regenerate();
-  grass.regenerate();
-});
+if (chestRegenerate)
+  chestRegenerate.addEventListener("click", () => {
+    resetCollisionState();
+    const newChestPos = generateChestPosition();
+    chestPos[0] = newChestPos[0];
+    chestPos[1] = newChestPos[1];
+    chestPos[2] = newChestPos[2];
+    chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
+    driftwood.regenerate();
+    boulders.regenerate();
+    barclaya.regenerate();
+    egeria.regenerate();
+    grass.regenerate();
+  });
 
-if (chestBubbles) chestBubbles.addEventListener("input", () => {
-  chestLayer.setBubbleCount(+chestBubbles.value);
-});
+if (chestBubbles)
+  chestBubbles.addEventListener("input", () => {
+    if (chestBubblesLabel) chestBubblesLabel.textContent = String(chestBubbles.value);
+    chestLayer.setBubbleCount(+chestBubbles.value);
+  });
 
-if (chestRotation) chestRotation.addEventListener("input", () => {
-  // Convert degrees to radians
-  chestLayer.setRotation((+chestRotation.value) * Math.PI / 180);
-});
+if (chestRotation)
+  chestRotation.addEventListener("input", () => {
+    if (chestRotationLabel) chestRotationLabel.textContent = String(chestRotation.value);
+    // Convert degrees to radians
+    chestLayer.setRotation((+chestRotation.value * Math.PI) / 180);
+  });
 
-if (chestTreasure) chestTreasure.addEventListener("input", () => {
-  chestLayer.setTreasureAmount(+chestTreasure.value);
-});
+if (chestTreasure)
+  chestTreasure.addEventListener("input", () => {
+    chestLayer.setTreasureAmount(+chestTreasure.value);
+  });
 
 // Fish house controls
 if (fishHouseHeight)
@@ -706,11 +820,13 @@ if (fishHouseBulge)
   });
 if (fishHouseStacks)
   fishHouseStacks.addEventListener("input", () => {
+    if (fishHouseStacksLabel) fishHouseStacksLabel.textContent = String(fishHouseStacks.value);
     fishHouse.setStacks(+fishHouseStacks.value);
     fishHouse.regenerate();
   });
 if (fishHouseLeafCount)
   fishHouseLeafCount.addEventListener("input", () => {
+    if (fishHouseLeafCountLabel) fishHouseLeafCountLabel.textContent = String(fishHouseLeafCount.value);
     fishHouse.setLeafCount(+fishHouseLeafCount.value);
     fishHouse.regenerate();
   });
@@ -757,6 +873,9 @@ tankSize?.addEventListener("input", () => {
   updateTankBounds(TANK_X_HALF, TANK_Z_HALF);
   resetCollisionState();
   const newChestPos = generateChestPosition();
+  chestPos[0] = newChestPos[0];
+  chestPos[1] = newChestPos[1];
+  chestPos[2] = newChestPos[2];
   chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
   driftwood.regenerate();
   boulders.regenerate();
@@ -768,6 +887,125 @@ tankSize?.addEventListener("input", () => {
   fanCoral.regenerate();
   staghornCoral.regenerate();
 });
+
+// last frame's shared data so click handler can use camera + floor height
+let lastShared = null;
+
+// Easter egg state: clicking same sand area 3x → rainbow gravel for a bit
+let lastClickPos = null;
+let sameSpotClicks = 0;
+let rainbowTimeout = null;
+
+// helper: spawn a cluster of bubbles at a given floor position
+function spawnBubbleBurstAt(x, z, yFloor, count, radius) {
+  for (let i = 0; i < count; i++) {
+    const ox = x + randRange(-radius, radius);
+    const oz = z + randRange(-radius, radius);
+    const oy = yFloor + randRange(0.01, 0.06);
+    bubbles.spawnBubble(ox, oy, oz);
+  }
+}
+
+// decide what happens when user clicks world space
+function handleWorldClick(worldPos) {
+  if (!lastShared) return;
+
+  const [x, y, z] = worldPos;
+  const floorY = lastShared.floorYOffset;
+
+  // 1) Check if near treasure chest
+  const dxC = x - chestPos[0];
+  const dzC = z - chestPos[2];
+  const distChest = Math.hypot(dxC, dzC);
+  if (distChest < 0.45) {
+    // chest click: big bubble burst + random treasure
+    spawnBubbleBurstAt(chestPos[0], chestPos[2], chestPos[1] + 0.05, 16, 0.06);
+    chestLayer.setTreasureAmount(Math.random()); // 0..1 tweak
+    return;
+  }
+
+  // 2) Sand click: small bubble puff
+  spawnBubbleBurstAt(x, z, floorY, 6, 0.04);
+
+  // 3) Easter egg: 3 clicks ~same spot ⇒ rainbow gravel mode for a bit
+  const CLICK_RADIUS = 0.25;
+  if (
+    lastClickPos &&
+    Math.hypot(x - lastClickPos[0], z - lastClickPos[1]) < CLICK_RADIUS
+  ) {
+    sameSpotClicks++;
+  } else {
+    sameSpotClicks = 1;
+    lastClickPos = [x, z];
+  }
+
+  if (sameSpotClicks >= 3) {
+    sameSpotClicks = 0;
+
+    // switch to rainbow palette temporarily
+    floor.setPalette("rainbow");
+
+    if (rainbowTimeout) clearTimeout(rainbowTimeout);
+    rainbowTimeout = setTimeout(() => {
+      floor.setPalette("sand");
+    }, 8000); // 8 seconds of secret rainbow sand
+  }
+}
+
+// ----- simple math + ray helpers (GLOBAL) -----
+function normalize3(v) {
+  const len = Math.hypot(v[0], v[1], v[2]) || 1.0;
+  return [v[0] / len, v[1] / len, v[2] / len];
+}
+
+function randRange(a, b) {
+  return a + Math.random() * (b - a);
+}
+
+// Ray from camera through a pixel (in drawingBuffer coords)
+function makeRayFromCamera(px, py, shared, canvas) {
+  const width = canvas.width;
+  const height = canvas.height;
+
+  const ndcX = (px / width) * 2.0 - 1.0;
+  const ndcY = 1.0 - (py / height) * 2.0; // flip Y
+
+  const aspect = width / height;
+  const fov = (FOV_DEG * Math.PI) / 180.0;
+  const tanHalfFov = Math.tan(fov / 2.0);
+
+  // direction in camera space
+  const xCam = ndcX * tanHalfFov * aspect;
+  const yCam = ndcY * tanHalfFov;
+  const dirCam = normalize3([xCam, yCam, -1.0]);
+
+  // transform dir from camera space to world using view matrix basis
+  const m = shared.view;
+  const camX = [m[0], m[1], m[2]];
+  const camY = [m[4], m[5], m[6]];
+  const camZ = [m[8], m[9], m[10]];
+
+  const dirWorld = normalize3([
+    dirCam[0] * camX[0] + dirCam[1] * camY[0] + dirCam[2] * camZ[0],
+    dirCam[0] * camX[1] + dirCam[1] * camY[1] + dirCam[2] * camZ[1],
+    dirCam[0] * camX[2] + dirCam[1] * camY[2] + dirCam[2] * camZ[2],
+  ]);
+
+  return { origin: shared.camPos, dir: dirWorld };
+}
+
+// intersect ray with horizontal plane y = yPlane
+function rayPlaneY(origin, dir, yPlane) {
+  const denom = dir[1];
+  if (Math.abs(denom) < 1e-5) return null;
+  const t = (yPlane - origin[1]) / denom;
+  if (t < 0.0) return null;
+  return [
+    origin[0] + dir[0] * t,
+    origin[1] + dir[1] * t,
+    origin[2] + dir[2] * t,
+  ];
+}
 
 /* ---------- Render loop ---------- */
 let last = performance.now(),
@@ -793,8 +1031,12 @@ let last = performance.now(),
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   // Projection & camera
-  const proj = makePerspective(45, canvas.width / canvas.height, 0.1, 30.0);
-
+  const proj = makePerspective(
+    FOV_DEG,
+    canvas.width / canvas.height,
+    0.1,
+    30.0
+  );
   cam.az += cam.vAz;
   cam.el += cam.vEl;
   cam.r += cam.vR;
@@ -840,6 +1082,8 @@ let last = performance.now(),
     floorYOffset: fp.yOffset,
     camPos: eye,
   };
+
+  lastShared = shared;
 
   // draw
   floor.draw(shared);

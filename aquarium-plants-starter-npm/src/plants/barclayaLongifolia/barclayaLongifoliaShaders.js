@@ -77,8 +77,7 @@ void main() {
   float sway    = sin(u_time*speed + t*1.7 + seed*6.28) * 0.35 * u_currentStrength * tipW;
   float wobble  = 0.02 * sin(8.0*t + u_time*1.6 + seed*20.0) * tipW;
 
-  // Assemble world position
-  vec3 base = vec3(i_baseXZ.x, 0.0, i_baseXZ.y);   // floor at y≈0 in your scene
+  vec3 base = vec3(i_baseXZ.x, 0.0, i_baseXZ.y);
   vec3 P    = base
             + tangent * (t * L)
             + normal  * (a_pos.x * width + side * undul)    // ribbon width + rippled edge

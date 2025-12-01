@@ -1,5 +1,5 @@
 import { vs, fs } from "./fanShaders.js";
-import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
+import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 export function createFanCoralLayer(gl) {
@@ -166,6 +166,9 @@ export function createFanCoralLayer(gl) {
   }
 
   function buildMesh() {
+    // Clear only fan coral objects from collision registry
+    clearObjectsByType("fanCoral");
+    
     const mesh = {
       pos: [],
       norm: [],
@@ -257,8 +260,6 @@ export function createFanCoralLayer(gl) {
 
   return {
     setFanCount(n) {
-      // FANS is const, so this doesn't change the count
-      // If you want dynamic count, make FANS a state variable
     },
     
     regenerate() {

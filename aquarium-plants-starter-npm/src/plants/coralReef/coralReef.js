@@ -1,6 +1,6 @@
 // plants/coralReef.js
 import { vs, fs } from "./coralReefShaders.js";
-import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
+import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 export function createCoralReefLayer(gl) {
@@ -175,6 +175,9 @@ export function createCoralReefLayer(gl) {
   }
 
   function scatter() {
+    // Clear only coral head objects from collision registry
+    clearObjectsByType("coral");
+    
     const data = {
       offset: [],
       scale: [],

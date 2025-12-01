@@ -1,6 +1,6 @@
 // plants/barclayaLongifolia.js
 import { vs, fs } from "./barclayaLongifoliaShaders.js";
-import { checkCollision2D, isInsideTank, registerObject } from "../../sceneCollision.js";
+import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 
 // ---- Noise + clump field ---------------------------------------------------
@@ -410,6 +410,9 @@ export function createBarclayaLayer(gl) {
   }
 
   function regenerate() {
+    // Clear only barclaya objects from collision registry
+    clearObjectsByType("barclaya");
+    
     const d = {
       baseXZ: [],
       lenWidth: [],
@@ -446,9 +449,8 @@ export function createBarclayaLayer(gl) {
           4
         );
 
-        // lower threshold where layoutBias is high → more clumps in the U
         const localThresh =
-          CLUMP.threshold - 0.25 * layoutBias; // up to ~0.3 easier to pass near back/corners
+          CLUMP.threshold - 0.25 * layoutBias;
         if (n < localThresh) continue; // no clump here
 
         const group = Math.min(
@@ -508,8 +510,17 @@ export function createBarclayaLayer(gl) {
     setPlantCount(n) {
       state.plants = Math.max(1, n | 0);
     },
+    setMinLeaves(n) {
+      state.minLeaves = Math.max(1, n | 0);
+    },
+    setMaxLeaves(n) {
+      state.maxLeaves = Math.max(state.minLeaves, n | 0);
+    },
     setRedProbability(p) {
       state.redProb = Math.max(0, Math.min(1, +p));
+    },
+    setUndulFreq(f) {
+      state.undulFreq = Math.max(5, +f);
     },
     regenerate,
     draw(shared) {
