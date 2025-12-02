@@ -1,3 +1,4 @@
+Look at our [Wiki](https://github.com/swimgirlnv/final-project/wiki) for updates!
 
 Check out our outline [here](https://docs.google.com/presentation/d/e/2PACX-1vQnqq_fKK03Ij5D9uBIATEcwBh0rPkNcPajY1BHC5ViwhOoerkRb8khPC03OFQqkpwtfcFMPFCsrBED/pub?start=false&loop=false&delayms=3000)!
 Inspo:
