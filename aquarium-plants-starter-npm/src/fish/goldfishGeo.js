@@ -105,8 +105,6 @@ function gfish_body(positions, indices, colors, bodyLength, bodyHeight, bodyWidt
   ];
   scaleCtrlPoints_out.push(...scaleCtrlPoints);
 
-  console.log(posCtrlPoints, scaleCtrlPoints);
-
   // use spline with radius value, interpolate with even rings for body
   let all_idx = [];
   all_idx = create_ring_spline(
