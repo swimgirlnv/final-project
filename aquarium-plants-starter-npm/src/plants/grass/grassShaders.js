@@ -28,6 +28,7 @@ uniform float u_flex;
 out float v_t;
 out vec3  v_color;
 out float v_camDist;
+out vec3  v_worldPos;
 
 float hash11(float n){ return fract(sin(n)*43758.5453123); }
 
@@ -79,6 +80,7 @@ void main() {
   // Project + fog distance
   vec4 V = u_view * vec4(world, 1.0);
   v_camDist = length(V.xyz);
+  v_worldPos = world;
   gl_Position = u_proj * V;
 
   // Color gradient
@@ -95,6 +97,7 @@ precision highp float;
 in float v_t;
 in vec3  v_color;
 in float v_camDist;
+in vec3  v_worldPos;
 out vec4 outColor;
 
 uniform float u_time;
@@ -104,6 +107,18 @@ uniform vec3  u_fogColor;
 uniform float u_fogNear;
 uniform float u_fogFar;
 
+// Disco lights
+uniform int u_numDiscoLights;
+uniform vec3 u_discoLightPos[6];
+uniform vec3 u_discoLightColor[6];
+
+// Disco spotlights
+uniform int u_numSpotlights;
+uniform vec3 u_spotlightPos[4];
+uniform vec3 u_spotlightDir[4];
+uniform vec3 u_spotlightColor[4];
+uniform float u_spotlightAngle[4];
+
 // Subtle animated caustics
 float caustic(float x){ return 0.5 + 0.5*sin(x); }
 
@@ -111,6 +126,40 @@ void main() {
   float c = 0.10 * caustic(v_t*24.0 + u_time*2.0)
           + 0.05 * caustic(v_t*39.0 - u_time*1.8);
   vec3 col = v_color * (1.0 + c);
+
+  // Add disco lights
+  if (u_numDiscoLights > 0) {
+    vec3 discoContribution = vec3(0.0);
+    for (int i = 0; i < 6; i++) {
+      if (i >= u_numDiscoLights) break;
+      vec3 lightDir = u_discoLightPos[i] - v_worldPos;
+      float dist = length(lightDir);
+      float attenuation = 1.0 / (1.0 + dist * dist * 0.5);
+      discoContribution += u_discoLightColor[i] * attenuation;
+    }
+    col += discoContribution * 0.8;
+  }
+  
+  // Add spotlights
+  if (u_numSpotlights > 0) {
+    vec3 spotContribution = vec3(0.0);
+    for (int i = 0; i < 4; i++) {
+      if (i >= u_numSpotlights) break;
+      vec3 lightDir = v_worldPos - u_spotlightPos[i];
+      float dist = length(lightDir);
+      vec3 L = lightDir / dist;
+      
+      // Check if point is within cone
+      float spotDot = dot(L, u_spotlightDir[i]);
+      if (spotDot > u_spotlightAngle[i]) {
+        // Smooth falloff at cone edges
+        float spotEffect = smoothstep(u_spotlightAngle[i], u_spotlightAngle[i] + 0.1, spotDot);
+        float attenuation = 1.0 / (1.0 + dist * dist * 0.15);
+        spotContribution += u_spotlightColor[i] * attenuation * spotEffect;
+      }
+    }
+    col += spotContribution * 1.5;
+  }
 
   // Fog mix
   float fog = smoothstep(u_fogNear, u_fogFar, v_camDist);

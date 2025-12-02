@@ -168,6 +168,28 @@ export function createGrassLayer(gl) {
   const u_fogColor = U("u_fogColor");
   const u_fogNear = U("u_fogNear");
   const u_fogFar = U("u_fogFar");
+  
+  // Disco lights
+  const u_numDiscoLights = U("u_numDiscoLights");
+  const u_discoLightPos = [];
+  const u_discoLightColor = [];
+  for (let i = 0; i < 6; i++) {
+    u_discoLightPos[i] = U(`u_discoLightPos[${i}]`);
+    u_discoLightColor[i] = U(`u_discoLightColor[${i}]`);
+  }
+  
+  // Disco spotlights
+  const u_numSpotlights = U("u_numSpotlights");
+  const u_spotlightPos = [];
+  const u_spotlightDir = [];
+  const u_spotlightColor = [];
+  const u_spotlightAngle = [];
+  for (let i = 0; i < 4; i++) {
+    u_spotlightPos[i] = U(`u_spotlightPos[${i}]`);
+    u_spotlightDir[i] = U(`u_spotlightDir[${i}]`);
+    u_spotlightColor[i] = U(`u_spotlightColor[${i}]`);
+    u_spotlightAngle[i] = U(`u_spotlightAngle[${i}]`);
+  }
 
   const state = {
     count: +document.getElementById("plantCount")?.value || 600,
@@ -311,6 +333,48 @@ export function createGrassLayer(gl) {
       );
       gl.uniform1f(u_fogNear, shared.fogNear);
       gl.uniform1f(u_fogFar, shared.fogFar);
+      
+      // Set disco lights
+      const discoLights = shared.discoLights || [];
+      if (u_numDiscoLights !== null) {
+        gl.uniform1i(u_numDiscoLights, discoLights.length);
+        for (let i = 0; i < 6; i++) {
+          if (u_discoLightPos[i] !== null && u_discoLightColor[i] !== null) {
+            if (i < discoLights.length) {
+              const light = discoLights[i];
+              gl.uniform3f(u_discoLightPos[i], light.position[0], light.position[1], light.position[2]);
+              gl.uniform3f(u_discoLightColor[i], light.color[0], light.color[1], light.color[2]);
+            } else {
+              gl.uniform3f(u_discoLightPos[i], 0, 0, 0);
+              gl.uniform3f(u_discoLightColor[i], 0, 0, 0);
+            }
+          }
+        }
+      }
+      
+      // Set spotlights
+      const spotlights = shared.discoSpotlights || [];
+      if (u_numSpotlights !== null) {
+        gl.uniform1i(u_numSpotlights, spotlights.length);
+        for (let i = 0; i < 4; i++) {
+          if (u_spotlightPos[i] !== null && u_spotlightDir[i] !== null && 
+              u_spotlightColor[i] !== null && u_spotlightAngle[i] !== null) {
+            if (i < spotlights.length) {
+              const spot = spotlights[i];
+              gl.uniform3f(u_spotlightPos[i], spot.position[0], spot.position[1], spot.position[2]);
+              gl.uniform3f(u_spotlightDir[i], spot.direction[0], spot.direction[1], spot.direction[2]);
+              gl.uniform3f(u_spotlightColor[i], spot.color[0], spot.color[1], spot.color[2]);
+              gl.uniform1f(u_spotlightAngle[i], spot.coneAngle);
+            } else {
+              gl.uniform3f(u_spotlightPos[i], 0, 0, 0);
+              gl.uniform3f(u_spotlightDir[i], 0, -1, 0);
+              gl.uniform3f(u_spotlightColor[i], 0, 0, 0);
+              gl.uniform1f(u_spotlightAngle[i], 0);
+            }
+          }
+        }
+      }
+      
       gl.drawElementsInstanced(
         gl.TRIANGLES,
         ribbon.count,

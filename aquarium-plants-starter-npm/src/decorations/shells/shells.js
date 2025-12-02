@@ -269,18 +269,37 @@ export function createShellLayer(gl) {
   const u_fogFar   = U("u_fogFar");
   const u_kind     = U("u_kind");
 
-  // ---- place a little cluster of shells near the front of the tank -------
+  // State for procedural generation
+  const state = {
+    scallopsCount: 3,
+    augersCount: 1,
+    moonsCount: 1,
+    spread: 0.55,
+  };
+
+  function rand(min, max) {
+    return min + Math.random() * (max - min);
+  }
+
+  // ---- place shells procedurally -------
   function initInstances() {
     const y = -0.02; // slightly buried into sand
+    const spreadX = TANK_X_HALF * state.spread;
+    const spreadZ = TANK_Z_HALF * state.spread;
+    const centerZ = -TANK_Z_HALF * 0.55; // near front of tank
 
-    // fan scallops (two or three)
+    // fan scallops
     {
-      const shells = [
-        { x: -0.28, z: -TANK_Z_HALF * 0.55, s: 0.16, hue: 0.03 },
-        { x: -0.06, z: -TANK_Z_HALF * 0.58, s: 0.15, hue: 0.04 },
-        { x: -0.18, z: -TANK_Z_HALF * 0.50, s: 0.14, hue: 0.02 },
-      ];
-      const count = shells.length;
+      const count = state.scallopsCount;
+      const shells = [];
+      for (let i = 0; i < count; i++) {
+        shells.push({
+          x: rand(-spreadX, spreadX),
+          z: centerZ + rand(-spreadZ * 0.15, spreadZ * 0.15),
+          s: rand(0.12, 0.18),
+          hue: rand(0.02, 0.06),
+        });
+      }
       const offsets = new Float32Array(count * 3);
       const scales  = new Float32Array(count);
       const hues    = new Float32Array(count);
@@ -298,10 +317,16 @@ export function createShellLayer(gl) {
 
     // long auger shell
     {
-      const shells = [
-        { x: -0.45, z: -TANK_Z_HALF * 0.45, s: 0.20, hue: 0.08 },
-      ];
-      const count = shells.length;
+      const count = state.augersCount;
+      const shells = [];
+      for (let i = 0; i < count; i++) {
+        shells.push({
+          x: rand(-spreadX, spreadX),
+          z: centerZ + rand(-spreadZ * 0.2, spreadZ * 0.2),
+          s: rand(0.18, 0.24),
+          hue: rand(0.06, 0.10),
+        });
+      }
       const offsets = new Float32Array(count * 3);
       const scales  = new Float32Array(count);
       const hues    = new Float32Array(count);
@@ -319,10 +344,16 @@ export function createShellLayer(gl) {
 
     // round moon shell
     {
-      const shells = [
-        { x: 0.18, z: -TANK_Z_HALF * 0.52, s: 0.22, hue: 0.10 },
-      ];
-      const count = shells.length;
+      const count = state.moonsCount;
+      const shells = [];
+      for (let i = 0; i < count; i++) {
+        shells.push({
+          x: rand(-spreadX, spreadX),
+          z: centerZ + rand(-spreadZ * 0.15, spreadZ * 0.15),
+          s: rand(0.18, 0.26),
+          hue: rand(0.08, 0.12),
+        });
+      }
       const offsets = new Float32Array(count * 3);
       const scales  = new Float32Array(count);
       const hues    = new Float32Array(count);
@@ -376,6 +407,19 @@ export function createShellLayer(gl) {
 
   return {
     draw,
+    setScallopsCount(n) {
+      state.scallopsCount = Math.max(0, Math.min(MAX_SCALLOPS, n | 0));
+    },
+    setAugersCount(n) {
+      state.augersCount = Math.max(0, Math.min(MAX_AUGERS, n | 0));
+    },
+    setMoonsCount(n) {
+      state.moonsCount = Math.max(0, Math.min(MAX_MOONS, n | 0));
+    },
+    setSpread(s) {
+      state.spread = Math.max(0.2, Math.min(0.8, +s));
+    },
+    regenerate: initInstances,
     _instScallop: instScallop,
     _instAuger:   instAuger,
     _instMoon:    instMoon,

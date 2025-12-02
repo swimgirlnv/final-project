@@ -27,6 +27,8 @@ import { createTreasureChestLayer } from "./decorations/treasureChest/treasureCh
 import { createWaterSurfaceLayer } from "./tank/water.js";
 import { createTankGlassLayer } from "./tank/glass.js";
 import { createShellLayer } from "./decorations/shells/shells.js";
+import { createDiscoLights } from "./discoLights.js";
+import { createCrabLayer } from "./critters/crab/crab.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -119,6 +121,8 @@ const showBoulders = document.getElementById("showBoulders");
 const showFishHouse = document.getElementById("showFishHouse");
 const showChest = document.getElementById("showChest");
 const showShells = document.getElementById("showShells");
+const showCrab = document.getElementById("showCrab");
+const discoModeToggle = document.getElementById("discoMode");
 
 const currentStrength = 0;
 const currentAngle = -3.14;
@@ -203,6 +207,16 @@ const fishHouseLeafCount = document.getElementById("fishHouseLeafCount");
 const fishHouseLeafCountLabel = document.getElementById("fishHouseLeafCountLabel");
 const fishHouseLeafLength = document.getElementById("fishHouseLeafLength");
 const fishHouseRegenerate = document.getElementById("fishHouseRegenerate");
+
+// shells controls
+const scallopsCount = document.getElementById("scallopsCount");
+const scallopsCountLabel = document.getElementById("scallopsCountLabel");
+const augersCount = document.getElementById("augersCount");
+const augersCountLabel = document.getElementById("augersCountLabel");
+const moonsCount = document.getElementById("moonsCount");
+const moonsCountLabel = document.getElementById("moonsCountLabel");
+const shellsSpread = document.getElementById("shellsSpread");
+const shellsRegenerate = document.getElementById("shellsRegenerate");
 
 // tank floor controls
 const floorGravelMix = document.getElementById("floorGravelMix");
@@ -485,6 +499,8 @@ const bubbles = createBubbleLayer(gl);
 const waterSurface = createWaterSurfaceLayer(gl);
 const tankGlass = createTankGlassLayer(gl);
 const shells = createShellLayer(gl);
+const crab = createCrabLayer(gl);
+const discoLights = createDiscoLights();
 
 // Generate random position for treasure chest
 function generateChestPosition() {
@@ -840,6 +856,41 @@ if (fishHouseRegenerate)
     fishHouse.regenerate();
   });
 
+// Shells controls
+if (scallopsCount)
+  scallopsCount.addEventListener("input", () => {
+    if (scallopsCountLabel) scallopsCountLabel.textContent = String(scallopsCount.value);
+    shells.setScallopsCount(+scallopsCount.value);
+    shells.regenerate();
+  });
+if (augersCount)
+  augersCount.addEventListener("input", () => {
+    if (augersCountLabel) augersCountLabel.textContent = String(augersCount.value);
+    shells.setAugersCount(+augersCount.value);
+    shells.regenerate();
+  });
+if (moonsCount)
+  moonsCount.addEventListener("input", () => {
+    if (moonsCountLabel) moonsCountLabel.textContent = String(moonsCount.value);
+    shells.setMoonsCount(+moonsCount.value);
+    shells.regenerate();
+  });
+if (shellsSpread)
+  shellsSpread.addEventListener("input", () => {
+    shells.setSpread(+shellsSpread.value);
+    shells.regenerate();
+  });
+if (shellsRegenerate)
+  shellsRegenerate.addEventListener("click", () => {
+    shells.regenerate();
+  });
+
+// Disco mode toggle
+if (discoModeToggle)
+  discoModeToggle.addEventListener("change", () => {
+    discoLights.setEnabled(discoModeToggle.checked);
+  });
+
 floorGravelMix?.addEventListener("input", () =>
   floor.setGravelMix(+floorGravelMix.value)
 );
@@ -1067,6 +1118,11 @@ let last = performance.now(),
     ? floor.getParams()
     : { amp: 0.18, scale: 0.9, yOffset: -0.03 };
 
+  // Update disco lights
+  discoLights.update(t);
+  const discoLightsArray = discoLights.getLights();
+  const discoSpotlightsArray = discoLights.getSpotlights();
+
   const shared = {
     proj,
     view,
@@ -1081,6 +1137,8 @@ let last = performance.now(),
     floorScale: fp.scale,
     floorYOffset: fp.yOffset,
     camPos: eye,
+    discoLights: discoLightsArray,
+    discoSpotlights: discoSpotlightsArray,
   };
 
   lastShared = shared;
@@ -1100,6 +1158,7 @@ let last = performance.now(),
   }
   if (showChest?.checked !== false) chestLayer.draw(shared);
   if (showShells?.checked !== false) shells.draw(shared);
+  if (showCrab?.checked !== false) crab.draw(shared);
   bubbles.draw(shared);
   gfish.draw(shared);
   waterSurface.draw(shared);
