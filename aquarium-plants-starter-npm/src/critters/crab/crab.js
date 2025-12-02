@@ -92,15 +92,15 @@ function makeHermitCrabMesh(gl) {
   const part = [];
   const idx = [];
 
-  // Body/head sits in front of shell (part 0)
+  // Slightly bigger, chubbier head
   appendSphere(
     pos,
     norm,
     part,
     idx,
-    [0.0, 0.035, 0.08],
-    0.07,
-    0.0,
+    [0.0, 0.038, 0.085],
+    0.075,
+    0.0, // part 0 = body/head
     10,
     16
   );
@@ -116,14 +116,14 @@ function makeHermitCrabMesh(gl) {
   }
 
   // Claws slightly bigger in very front
-  appendSphere(pos, norm, part, idx, [-0.055, 0.025, 0.19], 0.04, 1.0, 8, 12);
-  appendSphere(pos, norm, part, idx, [ 0.055, 0.025, 0.19], 0.04, 1.0, 8, 12);
+  appendSphere(pos, norm, part, idx, [-0.055, 0.025, 0.19], 0.042, 1.0, 8, 12);
+  appendSphere(pos, norm, part, idx, [ 0.055, 0.025, 0.19], 0.042, 1.0, 8, 12);
 
-  // Shell: stack of spheres behind body (part 2)
-  appendSphere(pos, norm, part, idx, [0.0, 0.055, -0.02], 0.11, 2.0, 10, 16);
-  appendSphere(pos, norm, part, idx, [0.0, 0.07,  -0.10], 0.09, 2.0, 10, 16);
-  appendSphere(pos, norm, part, idx, [0.0, 0.085, -0.18], 0.07, 2.0, 10, 16);
-  appendSphere(pos, norm, part, idx, [0.0, 0.095, -0.24], 0.05, 2.0, 10, 16);
+  // Shell: a bit more tapered & “spiral”
+  appendSphere(pos, norm, part, idx, [0.0, 0.055, -0.02], 0.115, 2.0, 10, 16);
+  appendSphere(pos, norm, part, idx, [0.0, 0.072, -0.105], 0.092, 2.0, 10, 16);
+  appendSphere(pos, norm, part, idx, [0.0, 0.087, -0.182], 0.072, 2.0, 10, 16);
+  appendSphere(pos, norm, part, idx, [0.0, 0.100, -0.245], 0.052, 2.0, 10, 16);
 
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
@@ -180,20 +180,20 @@ export function createCrabLayer(gl) {
   // --- wander state ------------------------------------------------------
   const crab = {
     pos: [
-      (Math.random() * 2 - 1) * (TANK_X_HALF * 0.4),
+      (Math.random() * 2 - 1) * (TANK_X_HALF * 0.35),
       0.0,
-      (Math.random() * 2 - 1) * (TANK_Z_HALF * 0.4),
+      (Math.random() * 2 - 1) * (TANK_Z_HALF * 0.35),
     ],
     angle: Math.random() * Math.PI * 2.0,   // visual facing
-    state: "rest",                          // "rest" | "move"
-    stateTime: 2.0 + Math.random() * 3.0,   // time remaining in current state
-    speed: 0.03 + Math.random() * 0.02,     // base sideways speed
+    state: "move",                          // start exploring
+    stateTime: 4.0 + Math.random() * 4.0,   // time remaining in current state
+    speed: 0.035 + Math.random() * 0.015,   // sideways scuttle speed
     target: [0.0, 0.0],                     // x,z target on sand
   };
 
   const BODY_RADIUS = 0.07;
   const MARGIN = 0.08;
-  const USE_SCENE_COLLISION = false; // flip true if you want rock avoidance
+  const USE_SCENE_COLLISION = false; // enables rock avoidance when true
 
   function clampToTank(x, half, margin) {
     const limit = half - margin;
@@ -203,16 +203,14 @@ export function createCrabLayer(gl) {
   }
 
   function pickNewTarget() {
-    // random spot in tank, slightly biased toward center
-    const rx = (Math.random() * 2 - 1) * (TANK_X_HALF * 0.8);
-    const rz = (Math.random() * 2 - 1) * (TANK_Z_HALF * 0.8);
+    const rx = (Math.random() * 2 - 1) * (TANK_X_HALF * 0.85);
+    const rz = (Math.random() * 2 - 1) * (TANK_Z_HALF * 0.85);
     crab.target[0] = clampToTank(rx, TANK_X_HALF, MARGIN);
     crab.target[1] = clampToTank(rz, TANK_Z_HALF, MARGIN);
   }
 
-  // pick an initial target
+  // initial target
   pickNewTarget();
-
   let lastTime = 0;
 
   function step(time, floorYOffset) {
@@ -222,46 +220,43 @@ export function createCrabLayer(gl) {
     crab.stateTime -= dt;
     crab.pos[1] = floorYOffset + 0.022; // sit just above sand
 
-    // ----- resting: groom + occasional wander decision -----
+    // ----- resting: short, then immediately find a new destination -----
     if (crab.state === "rest") {
       if (crab.stateTime <= 0.0) {
         crab.state = "move";
-        crab.stateTime = 3.0 + Math.random() * 5.0; // length of next trip
-        crab.speed = 0.024 + Math.random() * 0.02;
-
-        // head towards a fresh target
+        crab.stateTime = 4.0 + Math.random() * 5.0;
+        crab.speed = 0.032 + Math.random() * 0.018;
         pickNewTarget();
       }
       return;
     }
 
-    // ----- moving: scuttle sideways toward target ----------
+    // ----- moving: scuttle toward target in sideways stance ------------
     const dx = crab.target[0] - crab.pos[0];
     const dz = crab.target[1] - crab.pos[2];
     const dist = Math.hypot(dx, dz);
 
-    // if we reached the spot, chill for a bit
-    if (dist < 0.03) {
+    // reached the spot → pause & groom
+    if (dist < 0.035 || crab.stateTime <= 0.0) {
       crab.state = "rest";
-      crab.stateTime = 1.5 + Math.random() * 3.0;
+      crab.stateTime = 1.0 + Math.random() * 1.7;
       return;
     }
 
-    // forward direction toward target
     const moveDir = Math.atan2(dz, dx);
 
-    // crab body "facing": a bit offset from the move direction,
-    // so it looks like it’s scuttling sideways
+    // body facing 90° off the move direction (sideways look)
     const desiredFacing = moveDir - Math.PI * 0.5;
-    crab.angle = lerpAngle(crab.angle, desiredFacing, Math.min(1.0, 4.0 * dt));
+    crab.angle = lerpAngle(crab.angle, desiredFacing, Math.min(1.0, 5.0 * dt));
 
-    // sideways (velocity) direction
-    const sideAngle = crab.angle + Math.PI * 0.5;
+    // velocity direction is along moveDir; he LOOKS sideways, moves forward
     const stepLen = crab.speed * dt;
-    let nx = crab.pos[0] + Math.cos(sideAngle) * stepLen;
-    let nz = crab.pos[2] + Math.sin(sideAngle) * stepLen;
+    const vx = Math.cos(moveDir) * stepLen;
+    const vz = Math.sin(moveDir) * stepLen;
+    let nx = crab.pos[0] + vx;
+    let nz = crab.pos[2] + vz;
 
-    // tank bounds
+    // tank bounds / collision
     const inside =
       Math.abs(nx) < (TANK_X_HALF - MARGIN) &&
       Math.abs(nz) < (TANK_Z_HALF - MARGIN);
@@ -271,38 +266,27 @@ export function createCrabLayer(gl) {
       : false;
 
     if (!inside || collides) {
-      // clamp to tank and choose a new wander target
+      // clamp & bounce → new target somewhere else
       nx = clampToTank(nx, TANK_X_HALF, MARGIN);
       nz = clampToTank(nz, TANK_Z_HALF, MARGIN);
       crab.pos[0] = nx;
       crab.pos[2] = nz;
-
       pickNewTarget();
       crab.stateTime = Math.min(crab.stateTime, 1.0 + Math.random() * 1.0);
     } else {
       crab.pos[0] = nx;
       crab.pos[2] = nz;
 
-      // tiny random heading jitter for organic arcs
-      crab.angle += (Math.random() - 0.5) * 0.5 * dt;
-    }
-
-    if (crab.stateTime <= 0.0) {
-      crab.state = "rest";
-      crab.stateTime = 1.2 + Math.random() * 2.5;
+      // tiny jitter so paths aren't laser-straight, but softer than before
+      crab.angle += (Math.random() - 0.5) * 0.25 * dt;
     }
   }
 
   function draw(shared) {
     step(shared.time, shared.floorYOffset);
 
-    // how "active" he is: drives leg animation strength
-    const moveAmount =
-      crab.state === "move"
-        ? Math.min(1.0, crab.speed / 0.04)
-        : 0.0;
+    const moveAmount = crab.state === "move" ? 1.0 : 0.0;
 
-    // Temporarily disable culling so animated shell/body never pop
     const wasCull = gl.isEnabled(gl.CULL_FACE);
     if (wasCull) gl.disable(gl.CULL_FACE);
 

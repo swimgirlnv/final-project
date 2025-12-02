@@ -1,5 +1,3 @@
-// critters/crab/crabShaders.js
-
 export const vs = `#version 300 es
 precision highp float;
 
@@ -12,7 +10,6 @@ uniform mat4 u_view;
 uniform vec3 u_worldPos;
 uniform float u_angle;
 uniform float u_time;
-uniform float u_moveAmount; // 0 = idle, 1 = full scuttle
 
 out vec3 v_normal;
 out vec3 v_world;
@@ -23,22 +20,16 @@ out float v_camDist;
 void main() {
   vec3 p = a_pos;
 
-  float move = clamp(u_moveAmount, 0.0, 1.0);
-
   // --- little animations ------------------------------------------------
   if (a_part < 0.5) {
-    // body/head bob – stronger while moving
-    float freq = mix(2.0, 4.2, move);
-    float amp  = mix(0.002, 0.005, move);
-    float bob = amp * sin(u_time * freq + p.z * 10.0);
+    // body/head bob
+    float bob = 0.004 * sin(u_time * 3.0 + p.z * 10.0);
     p.y += bob;
   } else if (a_part < 1.5) {
     // legs/claws scuttle wiggle
     float phase = p.z * 18.0 + p.x * 9.0;
-    float swingAmp = mix(0.015, 0.06, move);
-    float liftAmp  = mix(0.003, 0.018, move);
-    float swing = swingAmp * sin(u_time * 10.0 + phase);
-    float lift  = liftAmp  * abs(sin(u_time * 12.0 + phase));
+    float swing = 0.05 * sin(u_time * 10.0 + phase);
+    float lift  = 0.015 * abs(sin(u_time * 12.0 + phase));
     p.z += swing;
     p.y += lift;
 
@@ -47,28 +38,13 @@ void main() {
     p.y *= 0.8;
     p.z *= 0.85;
   } else {
-    // shell subtle bob, more pronounced when scuttling
-    float freq = mix(1.8, 3.4, move);
-    float amp  = mix(0.0015, 0.004, move);
-    float bob = amp * sin(u_time * freq);
+    // shell subtle bob
+    float bob = 0.003 * sin(u_time * 2.3);
     p.y += bob;
 
     // squash shell a bit to make it more cartoony
     p.y *= 0.9;
     p.z *= 1.05;
-  }
-
-  // slight body lean when moving
-  if (move > 0.0) {
-    float lean = 0.10 * move;
-    // rotate around X in object space for a tiny forward lean
-    float cy = cos(lean);
-    float sy = sin(lean);
-    p = vec3(
-      p.x,
-      cy * p.y - sy * p.z,
-      sy * p.y + cy * p.z
-    );
   }
 
   // --- rotate + translate -----------------------------------------------
@@ -124,11 +100,12 @@ void main() {
   // Palette
   // -------------------------------------------------------
   // body/head gradient (front more saturated)
-  vec3 bodyA  = vec3(1.00, 0.58, 0.46); // near shell
-  vec3 bodyB  = vec3(1.00, 0.40, 0.32); // face/front
+  vec3 bodyA  = vec3(1.00, 0.60, 0.50); // near shell
+  vec3 bodyB  = vec3(1.00, 0.40, 0.33); // face/front
   vec3 legCol = vec3(0.93, 0.33, 0.32);
-  vec3 shellBase   = vec3(0.98, 0.93, 0.85);
-  vec3 shellStripe = vec3(0.96, 0.82, 0.70);
+
+  vec3 shellBase   = vec3(0.99, 0.94, 0.87);
+  vec3 shellStripe = vec3(0.97, 0.84, 0.72);
 
   // map local z (roughly -shell → +face) to 0..1
   float tBody = clamp((v_local.z - 0.02) / 0.20, 0.0, 1.0);
@@ -153,10 +130,10 @@ void main() {
     base *= (1.0 - 0.14 * speckMask);
 
     // darken underside (fake AO)
-    float ao = clamp(0.35 + 0.65 * (v_local.y * 8.0 + 0.4), 0.2, 1.0);
+    float ao = clamp(0.40 + 0.60 * (v_local.y * 8.0 + 0.35), 0.2, 1.0);
     base *= ao;
 
-    // front "cheeks"
+    // blush on cheeks
     if (v_part < 0.5) {
       vec2 cheekL = v_local.xz - vec2(-0.045, 0.08);
       vec2 cheekR = v_local.xz - vec2( 0.045, 0.08);
@@ -164,56 +141,74 @@ void main() {
       float cheekMask =
         smoothstep(r2, r2 * 0.4, dot(cheekL, cheekL)) +
         smoothstep(r2, r2 * 0.4, dot(cheekR, cheekR));
-      vec3 cheekCol = vec3(1.0, 0.65, 0.65);
-      base = mix(base, cheekCol, 0.6 * clamp(cheekMask, 0.0, 1.0));
+      vec3 cheekCol = vec3(1.0, 0.68, 0.68);
+      base = mix(base, cheekCol, 0.55 * clamp(cheekMask, 0.0, 1.0));
     }
 
-    // simple eyes + smile on the head (front hemisphere)
+    // ------------------------------------------------------------
+    // cartoon eyes?
+    // ------------------------------------------------------------
     if (v_part < 0.5) {
-      vec3 eyeTint = vec3(0.08, 0.04, 0.04);
+      vec3 darkCol = vec3(0.05, 0.03, 0.03);
 
-      // eyes in local xz
-      vec2 eyeL = v_local.xz - vec2(-0.035, 0.11);
-      vec2 eyeR = v_local.xz - vec2( 0.035, 0.11);
-      float eyeR2 = 0.018 * 0.018;
-      float eyeMask =
-        step(dot(eyeL, eyeL), eyeR2) +
-        step(dot(eyeR, eyeR), eyeR2);
+      // Eye centers in local xz (slightly popped forward)
+      vec2 centerL = vec2(-0.040, 0.11);
+      vec2 centerR = vec2( 0.040, 0.11);
 
-      base = mix(base, eyeTint, clamp(eyeMask, 0.0, 1.0));
+      vec2 dL = v_local.xz - centerL;
+      vec2 dR = v_local.xz - centerR;
+      float rL = length(dL);
+      float rR = length(dR);
 
-      // tiny highlight in each eye
-      vec2 hiL = eyeL - vec2(-0.004, 0.004);
-      vec2 hiR = eyeR - vec2(-0.004, 0.004);
-      float hiR2 = 0.007 * 0.007;
+      float rEye   = 0.028;  // white disc radius
+      float rPupil = 0.012;  // black center
+      float edge   = 0.004;
+
+      // White sclera
+      float scleraL = 1.0 - smoothstep(rEye, rEye + edge, rL);
+      float scleraR = 1.0 - smoothstep(rEye, rEye + edge, rR);
+      float scleraMask = clamp(scleraL + scleraR, 0.0, 1.0);
+      vec3 scleraCol = vec3(1.0);
+      base = mix(base, scleraCol, scleraMask);
+
+      // Black pupil (centered like the fish)
+      float pupilL = 1.0 - smoothstep(rPupil, rPupil + edge * 0.7, rL);
+      float pupilR = 1.0 - smoothstep(rPupil, rPupil + edge * 0.7, rR);
+      float pupilMask = clamp(pupilL + pupilR, 0.0, 1.0);
+      vec3 pupilCol = vec3(0.0, 0.0, 0.0);
+      base = mix(base, pupilCol, pupilMask);
+
+      // Tiny white highlight near upper-left of each eye
+      vec2 hiL = dL - vec2(-0.006, 0.006);
+      vec2 hiR = dR - vec2(-0.006, 0.006);
+      float rHi = 0.006;
       float hiMask =
-        step(dot(hiL, hiL), hiR2) +
-        step(dot(hiR, hiR), hiR2);
-      vec3 hiCol = vec3(1.0);
-      base = mix(base, hiCol, 0.7 * clamp(hiMask, 0.0, 1.0));
+        (1.0 - smoothstep(rHi, rHi + 0.003, length(hiL))) +
+        (1.0 - smoothstep(rHi, rHi + 0.003, length(hiR)));
+      hiMask = clamp(hiMask, 0.0, 1.0) * (1.0 - pupilMask); // stay on sclera
+      base = mix(base, vec3(1.0), 0.8 * hiMask);
 
-      // smile arc
+      // Simple smile arc under the eyes
       vec2 mouthP = v_local.xz - vec2(0.0, 0.06);
-      float r = length(mouthP);
-      float smile = smoothstep(0.055, 0.045, r) * step(mouthP.y, 0.0);
-      base = mix(base, eyeTint, 0.6 * smile);
+      float rM = length(mouthP);
+      float smile = smoothstep(0.055, 0.045, rM) * step(mouthP.y, 0.0);
+      base = mix(base, darkCol, 0.6 * smile);
     }
   }
 
   // -------------------------------------------------------
-  // Shell pattern – creamy spiral bands
+  // Shell pattern
   // -------------------------------------------------------
   if (v_part > 1.5) {
     float r   = length(v_local.xz);
     float ang = atan(v_local.z, v_local.x); // -pi..pi
 
-    // spiral + ring mix
-    float spiral = 0.5 + 0.5 * sin(ang * 5.5 + r * 30.0);
-    float rings  = 0.5 + 0.5 * sin(r * 42.0);
+    float spiral = 0.5 + 0.5 * sin(ang * 5.5 + r * 32.0);
+    float rings  = 0.5 + 0.5 * sin(r * 40.0);
 
     float swirl = mix(spiral, rings, 0.45);
-    vec3 lightCol = shellStripe * 1.05;
-    vec3 darkCol  = shellBase * 0.75;
+    vec3 lightCol = shellStripe * 1.10;
+    vec3 darkCol  = shellBase * 0.78;
     base = mix(darkCol, lightCol, swirl);
 
     // darker where shell meets body
@@ -226,11 +221,9 @@ void main() {
   // -------------------------------------------------------
   float rim = pow(1.0 - max(dot(n, V), 0.0), 2.4);
 
-  // base diffuse + rim
   vec3 col = base * (0.27 + 0.95 * lam) + rim * 0.40;
 
-  // specular: slightly stronger on shell
-  float shininess = (v_part > 1.5) ? 42.0 : 24.0;
+  float shininess = (v_part > 1.5) ? 46.0 : 24.0;
   vec3 H = normalize(L + V);
   float spec = pow(max(dot(n, H), 0.0), shininess);
   vec3 specTint = (v_part > 1.5) ? shellStripe : vec3(1.0);
