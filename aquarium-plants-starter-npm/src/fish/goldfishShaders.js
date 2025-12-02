@@ -2,10 +2,17 @@ export const vs = `#version 300 es
 precision highp float;
 
 // attributes
-in vec3 vs_Pos;
-in vec3 vs_Col;
-in int vs_Label;
-in vec3 vs_Pivot;
+layout(location=0) in vec3 vs_Pos;
+layout(location=1) in vec3 vs_Col;
+layout(location=2) in int vs_Label;
+layout(location=3) in vec3 vs_Pivot;
+
+// instances
+layout(location=4) in vec3 i_pos;       
+layout(location=5) in float i_rotY;     
+layout(location=6) in float i_size;     
+layout(location=7) in float i_speed;    
+layout(location=8) in float i_colorVar;
 
 // Uniforms
 uniform mat4 u_proj;
@@ -20,8 +27,19 @@ out vec3 v_color;
 out float v_camDist;
 flat out int v_label;
 out vec3 v_pivot;
+out float v_colorVar;
 
 float hash11(float n){ return fract(sin(n)*43758.5453123); }
+
+mat3 makeRotY(float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return mat3(
+        c, 0.0, s,
+        0.0, 1.0, 0.0,
+        -s, 0.0, c
+    );
+}
 
 // Cheap 2D noise based on sin (good enough for water wobble)
 float n2(vec2 p) {
@@ -62,42 +80,72 @@ vec3 rotateAroundPivot(vec3 pos, vec3 pivot, mat3 rot) {
 }
 
 void main() {
-  // just pass defined color to frag shader for now
   v_color = vs_Col;
+
+  v_colorVar = i_colorVar;
+
+  float t = u_time * (3.0 + i_speed * 1.0);
+  float amp = 0.1 + (i_speed * 0.9);
+
   vec3 animatePos = vs_Pos;
-  // pectoral anim
+  // Pectoral Fins (Label 6)
   if (vs_Label == 6) 
   {
     float side = sign(vs_Pos.x);
-    animatePos = rotateAroundPivot(animatePos, vs_Pivot, eulerRotate(vec3(0.0, sin(u_time + -1.0) * 0.5 * side, sin(u_time) * 0.2 * side)));
+    animatePos = rotateAroundPivot(animatePos, vs_Pivot, eulerRotate(vec3(
+        0.0, 
+        sin(t + -1.0) * 0.5 * side * amp, // Scaled by amp
+        sin(t) * 0.2 * side * amp         // Scaled by amp
+    )));
   }
-  // pelvic
+  // Pelvic Fins (Label 1)
   else if (vs_Label == 1)
   {
     float side = sign(vs_Pos.x);
-    animatePos = rotateAroundPivot(animatePos, vs_Pivot, eulerRotate(vec3(sin(u_time) * 0.5 + 0.5, sin(u_time) * 0.1 * side, sin(u_time + 0.7) * 0.5 * side + 0.1 * side)));
+    animatePos = rotateAroundPivot(animatePos, vs_Pivot, eulerRotate(vec3(
+        (sin(t) * 0.5 + 0.5) * amp, 
+        sin(t) * 0.1 * side * amp, 
+        (sin(t + 0.7) * 0.5 * side + 0.1 * side) * amp
+    )));
   }
-  // caudal
+  // Caudal/Tail (Label 7)
   else if (vs_Label == 7)
   {
-    animatePos = rotateAroundPivot(animatePos, vs_Pivot, eulerRotate(vec3(0.0, sin(u_time) * 0.1, 0.0)));
+    // Tail flaps harder when fast, barely moves when slow
+    animatePos = rotateAroundPivot(animatePos, vs_Pivot, eulerRotate(vec3(
+        0.0, 
+        sin(t) * 0.3 * amp, 
+        0.0
+    )));
   }
-  // mouth
+  // Mouth (Label 4) - Opens less when slow
   else if (vs_Label == 4)
   {
-    float scaleVal = ((sin(u_time * 1.7) + 1.0) / 2.0) + 0.35;
+    float scaleVal = ((sin(t * 1.7) + 1.0) / 2.0) * amp + 0.35;
     float animateVal = ((vs_Pos.y - vs_Pivot.y) * scaleVal) + vs_Pivot.y;
     animatePos = vec3(vs_Pos.x, animateVal, vs_Pos.z);
   }
-  vec3 wavePos = vec3(animatePos.x + (sin(3.0 * (u_time + animatePos.z)) * 0.04), animatePos.y, animatePos.z);
 
-  vec4 V = u_view * vec4(wavePos, 1.0);
+  // Body Wave (Swimming motion)
+  float waveMag = 0.05 * amp; 
+  vec3 wavePos = vec3(
+      animatePos.x + (sin(3.0 * (t + animatePos.z)) * waveMag), 
+      animatePos.y, 
+      animatePos.z
+  );
+
+  vec3 instancePos = wavePos * i_size;
+  // flipped :(
+  instancePos = makeRotY(i_rotY + 3.1459) * instancePos;
+  instancePos += i_pos;
+
+  vec4 V = u_view * vec4(instancePos, 1.0);
   v_camDist = length(V.xyz);
   vec4 world = u_proj * V;
 
   // Project
   v_pos = vs_Pos;
-  gl_Position = world + vec4(0.0, 1.0, 0.0, 0.0);
+  gl_Position = world;
   v_label = vs_Label;
   v_pivot = vs_Pivot;
 }`;
@@ -110,6 +158,7 @@ in vec3 v_color;
 in float v_camDist;
 flat in int v_label;
 in vec3 v_pivot;
+in float v_colorVar;
 out vec4 outColor;
 
 uniform float u_time;
@@ -123,13 +172,7 @@ float random (in vec3 _st) {
         43758.5453123);
 }
 
-// This noise function is featured
-// in the book of shaders section on Fractal Brownian Motion,
-// but from shadertoy (https://www.shadertoy.com/view/4dS3Wd)
-// I am going to add explanations for future use/tweaking, and
-// modify this for 3D noise
 float noise (in vec3 _st) {
-
     // Creating grid from points (similar to voronoi setup)
     vec3 i = floor(_st);
     // also getting fractional component for interpolation
@@ -169,10 +212,6 @@ float noise (in vec3 _st) {
 
 #define NUM_OCTAVES 5
 
-// This is also from book of shaders,
-// and is the FBM implementation.
-// I changed it so that it works in three
-// dimensions, but the 2D one is here: https://thebookofshaders.com/13/
 float fbm ( in vec3 _st) {
     float v = 0.0;                      // final output
     float a = 0.5;                      // amplitude of wave
@@ -196,7 +235,6 @@ float fbm ( in vec3 _st) {
     return v;
 }
 
-// Based off of a blender node network that tiled better in 2D
 float fish_scale(vec3 pos) {
   vec3 gridVal1 = (fract(pos) - vec3(0.5, 0.5, 0.5)) * 2.0;
   vec3 gridVal2 = (fract(pos + vec3(0.5, 0.5, 0.5)) - vec3(0.5, 0.5, 0.5)) * 2.0;
@@ -236,6 +274,7 @@ void main() {
   float fog = smoothstep(u_fogNear, u_fogFar, v_camDist); // 0 near -> 1 far
   vec3 col = mix(newCol, u_fogColor, fog);
   outColor = vec4(col, 1.0);
+
   // Head and Body
   if (v_label == 0 || v_label == 2) 
   {
@@ -341,11 +380,11 @@ void main() {
     // apply color palette  
     outColor = vec4(
       palette(
-        outColor.r, 
+        outColor.r + v_colorVar * 0.2, 
         vec3(0.5), 
         vec3(0.5), 
         vec3(1.0, 1.0, 1.0), 
-        vec3(0.0, 0.33, 0.67)
+        vec3(0.0, 0.33, 0.67 + v_colorVar * 0.1)
       ), 
       1.0
     );

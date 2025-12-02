@@ -293,7 +293,21 @@
         <!-- Fish Controls -->
         <div class="control-section" id="section-fish">
           <h1>🐠 Goldfish</h1>
+
+          <label>Inspect Fish</label>
+          <input type="checkbox" id="viewModeToggle">
+
+          <button class="btn" id="dropFoodBtn">Drop Food</button>
+
+          <label>Number of fish</label>
+          <input id="fishCount" type="range" min="0" max="25" step="1" value="15" />
+
+          <label>Color Seed</label>
+          <input id="fishColor" type="range" min="0.0" max="1.0" step="0.01" value="0.0" />
           
+          <label>Max Speed</label>
+          <input id="fishSpeed" type="range" min="0.05" max="2.0" step="0.05" value="1.0" />
+
           <h2>Body Characteristics</h2>
           <label>Body Length</label>
           <input id="bodyLength" type="range" min="0.3" max="2.0" step="0.05" value="1.35" />

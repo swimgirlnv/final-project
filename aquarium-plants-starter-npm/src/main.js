@@ -29,6 +29,8 @@ import { createTankGlassLayer } from "./tank/glass.js";
 import { createShellLayer } from "./decorations/shells/shells.js";
 import { createDiscoLights } from "./discoLights.js";
 import { createCrabLayer } from "./critters/crab/crab.js";
+import { BoidSystem } from "./boids/boidSystem.js";
+import { createSimpleCube } from "./boids/debugObjects/simpleCube.js";
 
 /* ---------- Helpers ---------- */
 function createGL(canvas) {
@@ -253,6 +255,12 @@ const pectoralAngle = document.getElementById("pectoralAngle");
 const afinLength = document.getElementById("afinLength");
 const afinWidth = document.getElementById("afinWidth");
 const afinShift = document.getElementById("afinShift");
+const fishColor = document.getElementById("fishColor");
+const fishCountSlider = document.getElementById("fishCount");
+const fishSpeedSlider = document.getElementById("fishSpeed");
+const dropFoodBtn = document.getElementById("dropFoodBtn");
+const viewModeToggle = document.getElementById("viewModeToggle");
+let isFocusView = false;
 
 // Function to read the currently checked value from a radio group
 const getRadioValue = (group) => {
@@ -367,6 +375,34 @@ function initGoldfishUI() {
 
 // Initialize the goldfish UI handlers immediately
 initGoldfishUI();
+
+// Event listeners for boid system
+if (fishCountSlider) {
+    fishCountSlider.addEventListener("input", () => {
+        const val = parseInt(fishCountSlider.value);
+        boidSys.regenerate(val);
+    });
+}
+
+if (fishSpeedSlider) {
+  fishSpeedSlider.addEventListener("input", () => {
+      const val = parseFloat(fishSpeedSlider.value);
+      boidSys.setBoidMaxSpeed(val * 0.005);
+  });
+}
+
+if (viewModeToggle) {
+    viewModeToggle.addEventListener("change", (e) => {
+        isFocusView = e.target.checked;
+    });
+}
+
+// Event listener for food
+if (dropFoodBtn) {
+  dropFoodBtn.addEventListener("click", () => {
+    boidSys.dropFood();
+  });
+}
 
 let clickStartX = 0;
 let clickStartY = 0;
@@ -917,6 +953,15 @@ palRainbow?.addEventListener(
 
 tankSize?.addEventListener("input", () => {
   setTankSize(+tankSize.value);
+  
+  const sizeFac = (+tankSize.value / 50.0) * 0.9;
+  boidSys.setBounds(
+    {
+      minX: -2.6 * sizeFac, maxX: 2.6 * sizeFac,
+      minY: 0.0, maxY: 2.0,
+      minZ: -2.2 * sizeFac, maxZ: 2.2 * sizeFac 
+    }
+  );
   floor.regenerate();
   waterSurface.regenerate();
   tankGlass.regenerate();
@@ -1058,6 +1103,45 @@ function rayPlaneY(origin, dir, yPlane) {
   ];
 }
 
+// Simple hash for deterministic "random" numbers based on an index
+function hash11(i) {
+    return (Math.sin(i * 12.9898) * 43758.5453) % 1;
+}
+
+const boidSys = new BoidSystem(
+  15,
+  {
+    separation: 0.09,
+    alignment: 0.05,
+    cohesion: 0.05,
+    boundaryForce: 1.0
+  },
+  {
+    minX: -2.6, maxX: 2.6,
+    minY: 0.0, maxY: 2.0,
+    minZ: -2.2, maxZ: 2.2
+  },
+  {
+    maxSpeed: 0.005,
+    maxForce: 0.0004
+  },
+  {
+    useSpatialHash: true, 
+    hashSize: 0.01
+  }
+);
+
+const fishData = {
+    pos: [],
+    rotY: [],
+    size: [],
+    speed: [],
+    colorVar: [],
+    count: 0
+};
+
+const foodCube = createSimpleCube(gl);
+
 /* ---------- Render loop ---------- */
 let last = performance.now(),
   frames = 0,
@@ -1159,6 +1243,63 @@ let last = performance.now(),
   if (showChest?.checked !== false) chestLayer.draw(shared);
   if (showShells?.checked !== false) shells.draw(shared);
   if (showCrab?.checked !== false) crab.draw(shared);
+
+  boidSys.update();
+  const boids = boidSys.getBoidPositions();
+
+  // Reset arrays
+  fishData.pos.length = 0;
+  fishData.rotY.length = 0;
+  fishData.size.length = 0;
+  fishData.speed.length = 0;
+  fishData.colorVar.length = 0;
+
+  if (isFocusView) {
+    fishData.pos.push(0, 0.9, 0);
+    // spin animation
+    fishData.rotY.push(t * 0.2); 
+    
+    fishData.size.push(1.0); 
+    fishData.speed.push(0.5);
+    
+    // uses average color
+    let colorShift = +fishColor.value;
+    fishData.colorVar.push(colorShift * 10.0 + 0.5);
+    
+    fishData.count = 1;
+  }
+  else {
+    // Populate fish instance data from boids
+    for (let i = 0; i < boids.length; i++) {
+      const b = boids[i];
+      
+      // Geometry Transforms
+      fishData.pos.push(b.x, b.y, b.z);
+      fishData.rotY.push(b.rotY);
+      
+      const speed = (b.vx !== undefined) ? Math.hypot(b.vx, 0.0, b.vz) * 100 : 0.0;
+      fishData.speed.push(Math.min(speed / 0.005, 1.0));
+
+      // Stable Random Attributes based on Index
+      const rand = Math.abs(hash11(i)); 
+      fishData.size.push(0.1 + Math.abs(hash11(rand)) * 0.1); // Hash again so similar color doesn't give us same size
+      let colorShift = +fishColor.value;
+      fishData.colorVar.push(rand + colorShift * 10.0);
+    }
+
+    fishData.count = boids.length;
+  }
+  gfish.updateInstances(fishData);
+
+  if (boidSys.food) {
+      // Draw the cube at the food position
+      // We pass a simple rotation that spins over time [angle, axisX, axisY, axisZ]
+      foodCube.draw(shared, 
+          [boidSys.food.x, boidSys.food.y, boidSys.food.z], 
+          [t * 2.0, 1.0, 1.0, 0.0] // Spin on diagonal axis
+      );
+  }
+
   bubbles.draw(shared);
   gfish.draw(shared);
   waterSurface.draw(shared);

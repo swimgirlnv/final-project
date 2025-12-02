@@ -25,6 +25,7 @@ function compile(gl, type, src) {
     throw new Error(gl.getShaderInfoLog(sh) || "Shader compile failed");
   return sh;
 }
+
 function makeProgram(gl, vsSrc, fsSrc, bindings) {
   const p = gl.createProgram();
   const v = compile(gl, gl.VERTEX_SHADER, vsSrc);
@@ -41,56 +42,88 @@ function makeProgram(gl, vsSrc, fsSrc, bindings) {
   return p;
 }
 
+// Helper to create instance buffers (style of grassShaders.js)
+function mkInstanceBuffers(gl, bindings, maxInstances) {
+  function mk(loc, comps = 1) {
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, maxInstances * comps * 4, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, comps, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(loc, 1); // 1 step per instance
+    return b;
+  }
+
+  // Define buffers based on requested instance attributes
+  // i_pos(3), i_rotY(1), i_size(1), i_speed(1), i_colorVar(1)
+  const bufs = {
+    pos: mk(bindings.i_pos, 3),
+    rotY: mk(bindings.i_rotY, 1),
+    size: mk(bindings.i_size, 1),
+    speed: mk(bindings.i_speed, 1),
+    colorVar: mk(bindings.i_colorVar, 1),
+    count: 0,
+  };
+
+  return {
+    ...bufs,
+    // Data expected to be an object with arrays: { pos:[], rotY:[], size:[], speed:[], colorVar:[], count: N }
+    update(data) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.pos);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.pos));
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.rotY);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.rotY));
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.size);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.size));
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.speed);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.speed));
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.colorVar);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.colorVar));
+
+      this.count = data.count;
+    },
+  };
+}
+
 // ---------- Geometry: Calls on fcns for head, body, caudal fin, dorsal fin, pectoral fin, pelvic fin, anal fin
-function createFishGeometry(gl) {
+function createFishGeometry(gl, instanceBindings) {
   const positions = [];
   const indices = [];
   const colors = [];
   const labels = [];
   const pivots = [];
 
+  // Default parameters
   goldfish(
     positions, indices, colors, labels, pivots,
-    // body params
-    // bodyLength, bodyHeight, bodyWidth, belly_size, arch
-    1.35, 0.6, 0.7, 0.0,
-    // head params
-    // headSize, eyeType, mouthTilt, eyeSize
-    {x: 0.4, y: 0.4, z: 0.4}, eye_types.GOOGLY, 0.0, 1.0,
-    // caudal params
-    // caudalLength, caudalWidth, caudalType, caudalCurve
-    0.75, 0.8, caudal_types.DROOPY, 1.0,
-    // dorsal params
-    // dorsalLength, dorsalWidth, dorsalShift, dorsalType
-    0.4, 0.35, 0.49, dorsal_types.PUNK,
-    // pelvic params
-    // pelvicLength, pelvicWidth, pelvicShift, pelvicAngle
-    0.45, 1.0, 0.55, -0.5,
-    // pectoral params
-    // pectoralLength, pectoralWidth, pectoralShift, pectoralAngle
-    0.38, 1.05, 0.2, -0.35,
-    // afin params
-    // afinLength, afinWidth, afinType, afinShift
-    0.2, 0.1, afin_types.SPIKY, 0.68
+    1.35, 0.6, 0.7, 0.0, // Body
+    {x: 0.4, y: 0.4, z: 0.4}, eye_types.GOOGLY, 0.0, 1.0, // Head
+    0.75, 0.8, caudal_types.DROOPY, 1.0, // Caudal
+    0.4, 0.35, 0.49, dorsal_types.PUNK, // Dorsal
+    0.45, 1.0, 0.55, -0.5, // Pelvic
+    0.38, 1.05, 0.2, -0.35, // Pectoral
+    0.2, 0.1, afin_types.SPIKY, 0.68 // Afin
   );
 
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
   
-  // Attribute locations (hard-coded to match shader order)
+  // Standard Geometry Attributes
   const vs_Pos_loc = 0;
   const vs_Col_loc = 1;
   const vs_Label_loc = 2;
   const vs_Pivot_loc = 3;
 
-  // Create VBOs and IBO
   const posBuffer = gl.createBuffer();
   const colorBuffer = gl.createBuffer();
   const labelBuffer = gl.createBuffer();
   const pivotBuffer = gl.createBuffer();
   const ibo = gl.createBuffer();
   
-  // Helper to setup/bind buffers initially
   function setupBuffer(buffer, data, attribLoc, size, type = gl.FLOAT, usage = gl.DYNAMIC_DRAW) {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), usage);
@@ -98,11 +131,9 @@ function createFishGeometry(gl) {
     gl.vertexAttribPointer(attribLoc, size, type, false, 0, 0);
   }
 
-  gl.bindVertexArray(vao);
   setupBuffer(posBuffer, positions, vs_Pos_loc, 3);
   setupBuffer(colorBuffer, colors, vs_Col_loc, 3);
   
-  // label buffer uses ints, so is treated differently
   gl.bindBuffer(gl.ARRAY_BUFFER, labelBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Int32Array(labels), gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(vs_Label_loc);
@@ -111,11 +142,11 @@ function createFishGeometry(gl) {
   setupBuffer(pivotBuffer, pivots, vs_Pivot_loc, 3);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-  gl.bufferData(
-    gl.ELEMENT_ARRAY_BUFFER,
-    new Uint16Array(indices),
-    gl.DYNAMIC_DRAW // Use DYNAMIC_DRAW since the data will change
-  );
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.DYNAMIC_DRAW);
+
+  // Initialize Instance Buffers on this VAO
+  // We allocate space for, say, 2000 fish. Adjust as needed.
+  const inst = mkInstanceBuffers(gl, instanceBindings, 2000);
 
   return {
     vao,
@@ -124,51 +155,18 @@ function createFishGeometry(gl) {
     labelBuffer,
     pivotBuffer,
     ibo,
-    count: indices.length,
-    attribs: { vs_Pos : vs_Pos_loc, vs_Col : vs_Col_loc },
-    // Store initial params so we can easily see what was used last
+    inst, // Reference to instance buffers manager
+    count: indices.length, 
+    
+    // Store params for regeneration
     params: {
-      // Body
-      bodyLength: 1.35, 
-      bodyHeight: 0.6, 
-      bodyWidth: 0.7, 
-      arch: 0.0, // Mapped from the 4th argument (0.0)
-      
-      // Head
-      headSize: {x: 0.4, y: 0.4, z: 0.4}, 
-      eyeType: eye_types.GOOGLY, 
-      mouthTilt: 0.0,
-      eyeSize: 1.0,
-      
-      // Caudal (Tail)
-      caudalLength: 0.75, 
-      caudalWidth: 0.8, 
-      caudalType: caudal_types.DROOPY,
-      caudalCurve: 1.0,
-      
-      // Dorsal
-      dorsalLength: 0.4, 
-      dorsalWidth: 0.35, 
-      dorsalShift: 0.49, 
-      dorsalType: dorsal_types.PUNK,
-      
-      // Pelvic
-      pelvicLength: 0.45, 
-      pelvicWidth: 1.0, 
-      pelvicShift: 0.55, 
-      pelvicAngle: -0.5,
-      
-      // Pectoral
-      pectoralLength: 0.38, 
-      pectoralWidth: 1.05, 
-      pectoralShift: 0.2, 
-      pectoralAngle: -0.35,
-      
-      // Afin (Anal Fin)
-      afinLength: 0.2, 
-      afinWidth: 0.1, 
-      afinType: afin_types.SPIKY, 
-      afinShift: 0.68
+      bodyLength: 1.35, bodyHeight: 0.6, bodyWidth: 0.7, arch: 0.0,
+      headSize: {x: 0.4, y: 0.4, z: 0.4}, eyeType: eye_types.GOOGLY, mouthTilt: 0.0, eyeSize: 1.0,
+      caudalLength: 0.75, caudalWidth: 0.8, caudalType: caudal_types.DROOPY, caudalCurve: 1.0,
+      dorsalLength: 0.4, dorsalWidth: 0.35, dorsalShift: 0.49, dorsalType: dorsal_types.PUNK,
+      pelvicLength: 0.45, pelvicWidth: 1.0, pelvicShift: 0.55, pelvicAngle: -0.5,
+      pectoralLength: 0.38, pectoralWidth: 1.05, pectoralShift: 0.2, pectoralAngle: -0.35,
+      afinLength: 0.2, afinWidth: 0.1, afinType: afin_types.SPIKY, afinShift: 0.68
     }
   };
 }
@@ -180,9 +178,6 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     const labels = [];
     const pivots = [];
 
-    console.log(newParams);
-
-    // 1. Call the geometry generation function with the new parameters
     goldfish(
         positions, indices, colors, labels, pivots,
         newParams.bodyLength, newParams.bodyHeight, newParams.bodyWidth, newParams.arch,
@@ -194,15 +189,11 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
         newParams.afinLength, newParams.afinWidth, afin_types.SPIKY, newParams.afinShift
     );
 
-    // 2. Update the GPU buffers (VBOs and IBO)
-    // Bind the VAO first
     gl.bindVertexArray(gfish.vao);
 
-    // Update Positions VBO
     gl.bindBuffer(gl.ARRAY_BUFFER, gfish.posBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.DYNAMIC_DRAW);
 
-    // Update Colors VBO
     gl.bindBuffer(gl.ARRAY_BUFFER, gfish.colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.DYNAMIC_DRAW);
 
@@ -212,35 +203,36 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     gl.bindBuffer(gl.ARRAY_BUFFER, gfish.pivotBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pivots), gl.DYNAMIC_DRAW);
 
-    // Update Indices IBO
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gfish.ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.DYNAMIC_DRAW);
-
-    // 3. Update the draw count and stored parameters
+    
     gfish.count = indices.length;
     gfish.params = newParams;
-
-    // Unbind VAO for safety
     gl.bindVertexArray(null);
-
-    // The existing gfish object (which holds the VAO, buffers, and count) is updated by reference.
-    // The draw loop will now use the new geometry data and new count.
 }
 
 // ---------- Main initialization and animation export
 export function createGoldfish(gl) {
     const bindings = {
+      // Geometry attributes
       vs_Pos: 0,
       vs_Col: 1,
       vs_Label: 2,
-      vs_Pivot: 3
+      vs_Pivot: 3,
+      // Instance attributes
+      i_pos: 4,      // vec3
+      i_rotY: 5,     // float
+      i_size: 6,     // float
+      i_speed: 7,    // float
+      i_colorVar: 8  // float (0..1)
     };
 
     const prog = makeProgram(gl, vs, fs, bindings);
-    const gfish = createFishGeometry(gl, 28);
-    gl.bindVertexArray(gfish.vao);
-  
-    // uniforms
+    
+    // Pass bindings so the VAO knows where to attach instance buffers
+    const gfish = createFishGeometry(gl, bindings); 
+    
+    // Uniforms
     const U = (n) => gl.getUniformLocation(prog, n);
     const u_proj = U("u_proj"),
       u_view = U("u_view"),
@@ -251,7 +243,18 @@ export function createGoldfish(gl) {
     const u_fogFar = U("u_fogFar");
   
     return {
+      geometry: gfish,
+
+      // data = { pos: [x,y,z...], rotY: [...], size: [...], speed: [...], colorVar: [...], count: N }
+      updateInstances(data) {
+        // We just delegate to the instance manager created in createFishGeometry
+        gfish.inst.update(data);
+      },
+
       draw(shared) {
+        // If no instances, don't draw
+        if (gfish.inst.count === 0) return;
+
         gl.useProgram(prog);
         gl.bindVertexArray(gfish.vao);
 
@@ -270,14 +273,17 @@ export function createGoldfish(gl) {
         );
         gl.uniform1f(u_fogNear, shared.fogNear);
         gl.uniform1f(u_fogFar, shared.fogFar);
+
+        // Draw instanced
+        // gfish.count = indices count of mesh
+        // gfish.inst.count = number of fish instances
         gl.drawElementsInstanced(
           gl.TRIANGLES,
           gfish.count,
           gl.UNSIGNED_SHORT,
           0,
-          1
+          gfish.inst.count
         );
-      },
-      geometry: gfish
+      }
     };
 }
