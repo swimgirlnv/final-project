@@ -122,13 +122,13 @@ class Boid {
     }
 
     // Update signature to accept bounds
-    update(bounds) { 
-        this.velocity.add(this.acceleration);
+    update(bounds, timeScale) { 
+        this.velocity.add(this.acceleration.mult(timeScale));
         this.velocity.limit(this.maxSpeed);
 
         this.velocity.lowerLimit(this.maxSpeed * 0.5);
 
-        this.position.add(this.velocity);
+        this.position.add(this.velocity.clone().mult(timeScale));
 
         // ensures boids never leak out of bounds
         let lowerBounds = new Vec3(bounds.minX, bounds.minY, bounds.minZ);
@@ -326,9 +326,11 @@ export class BoidSystem {
     setBehaviors(newConfig) { this.config = { ...this.config, ...newConfig }; }
     setBounds(newBounds) { this.bounds = { ...this.bounds, ...newBounds }; }
 
-    update() {
+    update(dt) {
+        let timeScale = dt * 240.0;
+
         if (this.food) {
-            this.food.y -= 0.0005; // Sink speed
+            this.food.y -= 0.0005 * timeScale; // Sink speed
             
             if (this.food.y < 0.0) {
                 this.food = null;
@@ -355,7 +357,7 @@ export class BoidSystem {
 
             boid.flock(this.boids, this.config, this.bounds, this.food);
             boid.updateRotation();
-            boid.update(this.bounds);
+            boid.update(this.bounds, timeScale);
         }
     }
 

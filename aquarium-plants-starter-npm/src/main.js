@@ -1244,7 +1244,7 @@ let last = performance.now(),
   if (showShells?.checked !== false) shells.draw(shared);
   if (showCrab?.checked !== false) crab.draw(shared);
 
-  boidSys.update();
+  boidSys.update(dt);
   const boids = boidSys.getBoidPositions();
 
   // Reset arrays
