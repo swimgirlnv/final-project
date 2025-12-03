@@ -327,7 +327,7 @@ export class BoidSystem {
     setBounds(newBounds) { this.bounds = { ...this.bounds, ...newBounds }; }
 
     update(dt) {
-        let timeScale = dt * 240.0;
+        let timeScale = dt * 120.0;
 
         if (this.food) {
             this.food.y -= 0.0005 * timeScale; // Sink speed
