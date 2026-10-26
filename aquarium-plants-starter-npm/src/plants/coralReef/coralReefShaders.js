@@ -19,6 +19,7 @@ uniform float u_time;
 
 out vec3 v_normal;
 out vec3 v_world;
+out float v_restY;  // height before sand placement, keeps patterns fixed to the object
 out vec3 v_local;   // position in local coral-head space (before radius)
 out float v_hue;
 out float v_camDist;
@@ -73,6 +74,7 @@ void main(){
   v_local = p;
 
   vec3 world = i_offset + p * radius;
+  v_restY = world.y;
   world.y += sandOffset(i_offset.xz);
   v_world = world;
 
@@ -91,6 +93,7 @@ precision highp float;
 
 in vec3 v_normal;
 in vec3 v_world;
+in float v_restY;
 in vec3 v_local;    // local coral-head coords
 in float v_hue;
 in float v_camDist;
@@ -129,7 +132,7 @@ void main(){
   float subsur = pow(max(dot(-n, L), 0.0), 2.0);
 
   // height factor: darker at base, brighter at tips
-  float h01 = clamp(v_world.y * 1.7 + 0.7, 0.0, 1.0);
+  float h01 = clamp(v_restY * 1.7 + 0.7, 0.0, 1.0);
 
   // --- base colony color ---------------------------------------------------
   vec3 baseHue = h2rgb(v_hue);

@@ -18,6 +18,7 @@ uniform float u_time;
 
 out vec3 v_normal;
 out vec3 v_world;
+out float v_restY;  // height before sand placement, keeps patterns fixed to the object
 out float v_hue;
 out float v_camDist;
 
@@ -68,6 +69,7 @@ void main(){
   vec3 displaced = worldPos + a_normal * disp;
 
   vec3 pos = displaced * i_scale + i_offset;
+  v_restY = pos.y;
   pos.y += sandOffset(i_offset.xz);
 
   v_world  = pos;
@@ -86,6 +88,7 @@ precision highp float;
 
 in vec3 v_normal;
 in vec3 v_world;
+in float v_restY;
 in float v_hue;
 in float v_camDist;
 out vec4 outColor;
@@ -143,7 +146,7 @@ void main(){
   vec3 base     = hueCol * rockTint;
 
   // world-space y → mossy tops
-  float mossMask = smoothstep(-0.05, 0.35, v_world.y);
+  float mossMask = smoothstep(-0.05, 0.35, v_restY);
   vec3 mossCol   = vec3(0.24, 0.45, 0.28);
   base = mix(base, mossCol, mossMask * 0.65);
 

@@ -12,28 +12,32 @@ uniform mat4 u_view;
 ${sandHeightGLSL}
 uniform mat4 u_model;
 uniform float u_time;
+uniform float u_heightScale; // house height compared to the default 0.65 tall house
 
 out vec2 v_uv;
 out vec3 v_normal;
 out vec3 v_world;
+out float v_restY;  // height before sand placement, keeps patterns fixed to the object
 out float v_camDist;
 
 void main(){
   // Start from model-space position
   vec3 pos = a_pos;
 
-  // Slight sway for the crown leaves (vertices higher than ~0.6 in model space)
-  if (pos.y > 0.6) {
+  // Slight sway for the crown leaves (vertices higher than ~0.6 on a default house)
+  float crownY = 0.6 * u_heightScale;
+  if (pos.y > crownY) {
     float t = u_time * 0.7;
     // Direction away from axis in xz
     vec2 dir = normalize(pos.xz + vec2(1e-4, 0.0));
     // More bend toward the tip
-    float amount = (pos.y - 0.6) * 0.05;
+    float amount = (pos.y - crownY) * 0.05;
     float wave = sin(t + pos.y * 6.0 + pos.x * 3.0);
     pos.xz += dir * amount * wave;
   }
 
   vec4 world = u_model * vec4(pos, 1.0);
+  v_restY = world.y / u_heightScale;
   world.y = onSand(u_model[3].xz, world.y);
   v_world = world.xyz;
 
@@ -53,6 +57,7 @@ precision highp float;
 in vec2 v_uv;
 in vec3 v_normal;
 in vec3 v_world;
+in float v_restY;
 in float v_camDist;
 out vec4 outColor;
 
@@ -78,8 +83,8 @@ void main(){
   vec3 n = normalize(v_normal);
   float lam = clamp(dot(n, normalize(vec3(0.4,1.0,0.3))), 0.0, 1.0);
 
-  // height in world space: used to switch between body / band / leaves
-  float y = v_world.y;
+  // height on the house, scaled to the default house: used to switch between body / band / leaves
+  float y = v_restY;
 
   vec3 col;
 

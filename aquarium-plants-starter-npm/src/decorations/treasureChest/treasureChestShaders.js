@@ -19,6 +19,7 @@ uniform float u_lidAngle;    // 0 = closed, ~1.2 rad = open
 uniform vec2  u_hingeYZ;     // (hingeY, hingeZ)
 
 out vec3 v_world;
+out float v_restY;  // height before sand placement, keeps patterns fixed to the object
 out vec3 v_normal;
 out vec2 v_uv;
 out float v_kind;
@@ -55,6 +56,7 @@ void main() {
     nrm = hn;
     }
   vec4 world = u_model * vec4(pos, 1.0);
+  v_restY = world.y;
   world.y = onSand(u_model[3].xz, world.y);
   v_world = world.xyz;
 
@@ -72,6 +74,7 @@ export const fs = `#version 300 es
 precision highp float;
 
 in vec3 v_world;
+in float v_restY;
 in vec3 v_normal;
 in vec2 v_uv;
 in float v_kind;
@@ -119,7 +122,7 @@ void main() {
   } else {
     // Treasure (shiny gold coins)
     // two offset grids of round coins so they overlap like a pile
-    vec2 p = (v_world.xz + v_world.y * 0.5) * 22.0;
+    vec2 p = (v_world.xz + v_restY * 0.5) * 22.0;
     float coin = 0.0;
     float rim = 0.0;
     for (int layer = 0; layer < 2; layer++) {
@@ -145,7 +148,7 @@ void main() {
   }
 
   // Slight darkening very close to sand
-  float foot = smoothstep(-0.12, 0.05, v_world.y);
+  float foot = smoothstep(-0.12, 0.05, v_restY);
   col = mix(vec3(0.10,0.12,0.10), col, foot);
 
   // Fog

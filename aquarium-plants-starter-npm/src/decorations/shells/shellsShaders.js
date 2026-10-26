@@ -20,6 +20,7 @@ uniform float u_kind;  // 0 = scallop, 1 = auger, 2 = moon
 
 out vec3 v_normal;
 out vec3 v_world;
+out float v_restY;  // height before sand placement, keeps patterns fixed to the object
 out vec3 v_local;   // local (unscaled) coords for patterning
 out float v_camDist;
 out vec2 v_uv;
@@ -39,6 +40,7 @@ void main() {
 
   v_local = p;              // local space (before scale)
   vec3 world = i_offset + p * i_scale;
+  v_restY = world.y;
   world.y += sandOffset(i_offset.xz);
 
   v_world  = world;
@@ -58,6 +60,7 @@ precision highp float;
 
 in vec3 v_normal;
 in vec3 v_world;
+in float v_restY;
 in vec3 v_local;
 in float v_camDist;
 in vec2 v_uv;
@@ -96,7 +99,7 @@ void main() {
   float spec = pow(max(dot(n, H), 0.0), 24.0);
 
   // ambient occlusion from “contact with sand” (sand roughly around y = 0)
-  float occl = smoothstep(-0.10, 0.06, v_world.y); // low y → darker
+  float occl = smoothstep(-0.10, 0.06, v_restY); // low y → darker
   occl = mix(0.55, 1.0, occl);                     // 0.55..1.0 multiplier
 
   vec3 col;
@@ -209,7 +212,7 @@ void main() {
   col *= light * occl;
 
   // warm bounce from sand (up-facing parts near floor)
-  float upBounce = max(n.y, 0.0) * smoothstep(-0.15, 0.08, v_world.y);
+  float upBounce = max(n.y, 0.0) * smoothstep(-0.15, 0.08, v_restY);
   col += vec3(0.06, 0.05, 0.04) * upBounce;
 
   // tiny time-varying sparkle so they feel glossy

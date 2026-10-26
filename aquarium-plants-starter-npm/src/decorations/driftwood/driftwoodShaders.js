@@ -10,18 +10,21 @@ in float a_hue;  // per-piece hue bias
 
 uniform mat4 u_proj, u_view;
 ${sandHeightGLSL}
+uniform float u_floorYOffset;
 
 out vec3  v_nrmW;
 out vec3  v_posW;
 out vec2  v_uv;
 out float v_hue;
 out float v_camDist;
+out float v_aboveSand; // height above the sand surface under this vertex
 
 void main(){
   // follow the sand surface under each vertex
   vec3 pos = vec3(a_pos.x, onSand(a_pos.xz, a_pos.y), a_pos.z);
 
   v_posW = pos;
+  v_aboveSand = pos.y - (sandOffset(a_pos.xz) + u_floorYOffset);
   v_nrmW = normalize(a_nrm);
   v_uv   = a_uv;
   v_hue  = a_hue;
@@ -40,16 +43,13 @@ in vec3  v_posW;
 in vec2  v_uv;
 in float v_hue;
 in float v_camDist;
+in float v_aboveSand;
 out vec4 outColor;
 
 uniform vec3  u_lightDir;
 uniform vec3  u_ambient;
 uniform vec3  u_fogColor;
 uniform float u_fogNear, u_fogFar;
-
-uniform float u_floorAmp;
-uniform float u_floorScale;
-uniform float u_floorYOffset;
 
 // Procedural controls
 uniform float u_grainFreq;
@@ -96,8 +96,7 @@ void main(){
   float cavity = (1.0 - grain) * 0.35 + pow(1.0 - abs(dot(N, L)), 2.0) * 0.20;
   vec3 lit = albedo * (u_ambient + wrap*0.9) * (1.0 - cavity*0.35);
 
-  float sandH = (fbm(v_posW.xz * u_floorScale) - 0.5) * u_floorAmp + u_floorYOffset;
-  float bury  = smoothstep(0.03, -0.01, v_posW.y - sandH); // >0 when inside sand
+  float bury  = smoothstep(0.03, -0.01, v_aboveSand); // >0 when inside sand
   // darken + slight desaturation when buried
   vec3 buried = mix(lit, mix(lit, vec3(dot(lit, vec3(0.299,0.587,0.114))), 0.35), 0.65);
   lit = mix(lit, buried, clamp(bury, 0.0, 1.0));

@@ -178,8 +178,9 @@ export function createDriftwoodLayer(gl) {
     for (let s = 0; s < sides; s++) {
       const i0 = ringVertsStart + s;
       const i1 = ringVertsStart + ((s + 1) % sides);
-      if (vVal < 0.5) out.idx.push(cIdx, i0, i1);
-      else out.idx.push(cIdx, i1, i0);
+      // wound so the cap faces outward along its normal
+      if (vVal < 0.5) out.idx.push(cIdx, i1, i0);
+      else out.idx.push(cIdx, i0, i1);
     }
   }
 
@@ -295,7 +296,8 @@ export function createDriftwoodLayer(gl) {
         const s1 = r0 + ((s + 1) % sides);
         const s2 = r1 + s;
         const s3 = r1 + ((s + 1) % sides);
-        out.idx.push(s0, s2, s1, s1, s2, s3);
+        // wound so the outside of the tube is the front face
+        out.idx.push(s0, s1, s2, s1, s3, s2);
       }
     }
 

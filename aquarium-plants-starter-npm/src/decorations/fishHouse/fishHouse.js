@@ -176,7 +176,7 @@ export function createFishHouseLayer(gl) {
     const fit = Math.min(1, decorCeiling() / top);
     if (fit < 1) for (let i = 0; i < pos.length; i++) pos[i] *= fit;
 
-    return { pos, norm, uv, idx, top: top * fit };
+    return { pos, norm, uv, idx, top: top * fit, heightScale: (height * fit) / 0.65 };
   }
   
   let mesh = makeHouse();
@@ -217,7 +217,8 @@ export function createFishHouseLayer(gl) {
   const u_proj = U("u_proj"),
     u_view = U("u_view"),
     u_model = U("u_model"),
-    u_time = U("u_time");
+    u_time = U("u_time"),
+    u_heightScale = U("u_heightScale");
   const u_fogColor = U("u_fogColor");
   const u_fogNear = U("u_fogNear");
   const u_fogFar = U("u_fogFar");
@@ -294,6 +295,7 @@ export function createFishHouseLayer(gl) {
       gl.uniformMatrix4fv(u_proj, false, shared.proj);
       gl.uniformMatrix4fv(u_view, false, shared.view);
       gl.uniformMatrix4fv(u_model, false, model);
+      gl.uniform1f(u_heightScale, mesh.heightScale);
       gl.uniform1f(u_time, shared.time);
       gl.uniform3f(
         u_fogColor,
