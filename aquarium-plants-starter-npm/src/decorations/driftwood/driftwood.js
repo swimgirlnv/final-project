@@ -1,6 +1,7 @@
 // decorations/driftwood/driftwood.js
 import { vs, fs } from "./driftwoodShaders.js";
-import { findValidPosition, registerObject } from "../../sceneCollision.js";
+import { findValidPosition, registerObject, clearObjectsByType } from "../../sceneCollision.js";
+import { TANK_X_HALF, TANK_Z_HALF, decorCeiling } from "../../tank/tankFloor.js";
 
 export function createDriftwoodLayer(gl) {
   // --- compile/link
@@ -29,7 +30,7 @@ export function createDriftwoodLayer(gl) {
   }
 
   const TAU = Math.PI * 2;
-  const TANK = { xHalf: 1.6, zHalf: 1.2, margin: 0.08 }; // confines
+  const TANK_MARGIN = 0.08; // gap kept between wood surface and glass
 
   function rand(a, b) {
     return a + Math.random() * (b - a);
@@ -71,23 +72,32 @@ export function createDriftwoodLayer(gl) {
     };
   }
 
-  // clamp & bounce to keep inside tank on X/Z
+  // clamp & bounce to keep the whole tube inside tank on X/Z
   function confine(pt, dir) {
-    if (pt.x < -TANK.xHalf + TANK.margin) {
-      pt.x = -TANK.xHalf + TANK.margin;
+    const margin = TANK_MARGIN + state.trunkRadius[1];
+    const xLim = Math.max(0, TANK_X_HALF - margin);
+    const zLim = Math.max(0, TANK_Z_HALF - margin);
+    if (pt.x < -xLim) {
+      pt.x = -xLim;
       dir.x = Math.abs(dir.x);
     }
-    if (pt.x > TANK.xHalf - TANK.margin) {
-      pt.x = TANK.xHalf - TANK.margin;
+    if (pt.x > xLim) {
+      pt.x = xLim;
       dir.x = -Math.abs(dir.x);
     }
-    if (pt.z < -TANK.zHalf + TANK.margin) {
-      pt.z = -TANK.zHalf + TANK.margin;
+    if (pt.z < -zLim) {
+      pt.z = -zLim;
       dir.z = Math.abs(dir.z);
     }
-    if (pt.z > TANK.zHalf - TANK.margin) {
-      pt.z = TANK.zHalf - TANK.margin;
+    if (pt.z > zLim) {
+      pt.z = zLim;
       dir.z = -Math.abs(dir.z);
+    }
+    // keep the wood under the water surface
+    const yLim = Math.max(0.05, decorCeiling() - state.trunkRadius[1]);
+    if (pt.y > yLim) {
+      pt.y = yLim;
+      dir.y = -Math.abs(dir.y);
     }
   }
 
@@ -330,6 +340,7 @@ export function createDriftwoodLayer(gl) {
 
   // -------- mesh builder (procedural)
   function buildMesh() {
+    clearObjectsByType("driftwood");
     const pos = [],
       nrm = [],
       uv = [],
@@ -343,11 +354,10 @@ export function createDriftwoodLayer(gl) {
       // Use collision system to find valid driftwood position
       const woodRadius = rand(state.trunkRadius[0], state.trunkRadius[1]) * 3.0; // approximate footprint
       const pos = findValidPosition(woodRadius, 50, 0.08);
-      const base = pos ? 
-        { x: pos.x, y: rand(0.03, 0.06), z: pos.z } :
-        { x: rand(-TANK.xHalf + 0.2, TANK.xHalf - 0.2), y: rand(0.03, 0.06), z: rand(-TANK.zHalf + 0.2, TANK.zHalf - 0.2) };
-      
-      if (pos) registerObject(pos.x, pos.z, woodRadius, 'driftwood');
+      if (!pos) continue; // no room for this piece inside the tank
+
+      const base = { x: pos.x, y: rand(0.03, 0.06), z: pos.z };
+      registerObject(pos.x, pos.z, woodRadius, 'driftwood');
       
       const yaw = rand(0, TAU);
       const dir = { x: Math.cos(yaw), y: 0.15, z: Math.sin(yaw) };
@@ -428,13 +438,11 @@ export function createDriftwoodLayer(gl) {
       gl.vertexAttribPointer(loc, comps, gl.FLOAT, false, 0, 0);
       return b;
     }
-    vbo(pos, 0, 3);
-    vbo(nrm, 1, 3);
-    vbo(uv, 2, 2);
-    vbo(hue, 3, 1);
+    const buffers = [vbo(pos, 0, 3), vbo(nrm, 1, 3), vbo(uv, 2, 2), vbo(hue, 3, 1)];
 
     const ib = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    buffers.push(ib);
 
     // Pick an index type that’s always supported on this device
     const hasUint32 =
@@ -458,13 +466,19 @@ export function createDriftwoodLayer(gl) {
         Math.max(4, state.branchSegs[0] - 2),
         Math.max(6, state.branchSegs[1] - 2),
       ];
+      gl.deleteVertexArray(vao);
+      buffers.forEach((b) => gl.deleteBuffer(b));
       return buildMesh(); // rebuild once with lower detail
     }
 
     const indexArray = hasUint32 ? new Uint32Array(idx) : new Uint16Array(idx);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexArray, gl.STATIC_DRAW);
 
-    return { vao, count: idx.length, indexType };
+    // tallest point, used to keep the wood under the water on high dunes
+    let maxY = 0;
+    for (let i = 1; i < pos.length; i += 3) maxY = Math.max(maxY, pos[i]);
+
+    return { vao, buffers, count: idx.length, indexType, maxY };
   }
 
   const prog = program(vs, fs, { a_pos: 0, a_nrm: 1, a_uv: 2, a_hue: 3 });
@@ -500,11 +514,15 @@ export function createDriftwoodLayer(gl) {
   const u_grainFreq = U("u_grainFreq"),
     u_grainMix = U("u_grainMix"),
     u_colorWarm = U("u_colorWarm");
+  const u_ceiling = U("u_ceiling"),
+    u_decorHeight = U("u_decorHeight");
   const u_floorAmp = U("u_floorAmp"),
     u_floorScale = U("u_floorScale"),
     u_floorYOffset = U("u_floorYOffset");
 
   function regenerate() {
+    gl.deleteVertexArray(mesh.vao);
+    mesh.buffers.forEach((b) => gl.deleteBuffer(b));
     mesh = buildMesh();
   }
 
@@ -562,6 +580,8 @@ export function createDriftwoodLayer(gl) {
       gl.uniform1f(u_floorAmp, shared.floorAmp ?? 0.18);
       gl.uniform1f(u_floorScale, shared.floorScale ?? 0.9);
       gl.uniform1f(u_floorYOffset, shared.floorYOffset ?? -0.03);
+      gl.uniform1f(u_ceiling, shared.decorCeiling ?? 1.7);
+      gl.uniform1f(u_decorHeight, mesh.maxY);
 
       gl.drawElements(gl.TRIANGLES, mesh.count, mesh.indexType, 0);
     },

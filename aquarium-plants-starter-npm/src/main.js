@@ -4,8 +4,11 @@ import { createGrassLayer } from "./plants/grass/grass.js";
 import {
   createFloorLayer,
   setTankSize,
+  setTankHeight,
+  decorCeiling,
   TANK_X_HALF,
   TANK_Z_HALF,
+  TANK_HEIGHT,
 } from "./tank/tankFloor.js";
 import { createBarclayaLayer } from "./plants/barclayaLongifolia/barclayaLongifolia.js";
 import { createCoralReefLayer } from "./plants/coralReef/coralReef.js";
@@ -19,7 +22,7 @@ import {
   updateTankBounds,
   findValidPosition,
   registerObject,
-  TANK_BOUNDS,
+  clearObjectsByType,
 } from "./sceneCollision.js";
 import { createGoldfish, regenerateGoldfishGeometry } from "./fish/goldfish.js";
 import { createBubbleLayer } from "./decorations/bubbles/bubbles.js";
@@ -27,7 +30,9 @@ import { createTreasureChestLayer } from "./decorations/treasureChest/treasureCh
 import { createWaterSurfaceLayer } from "./tank/water.js";
 import { createTankGlassLayer } from "./tank/glass.js";
 import { createShellLayer } from "./decorations/shells/shells.js";
-import { createDiscoLights } from "./discoLights.js";
+import { createDiscoLights, DISCO_GLOW_HUE_RATE } from "./discoLights.js";
+import { createDiscoPass } from "./disco/discoPass.js";
+import { createSunLayer } from "./sky/sun.js";
 import { createCrabLayer } from "./critters/crab/crab.js";
 import { BoidSystem } from "./boids/boidSystem.js";
 import { createSimpleCube } from "./boids/debugObjects/simpleCube.js";
@@ -229,6 +234,7 @@ const palSand = document.getElementById("floorPalSand");
 const palGrey = document.getElementById("floorPalGrey");
 const palRainbow = document.getElementById("floorPalRainbow");
 const tankSize = document.getElementById("tankSize");
+const tankHeight = document.getElementById("tankHeight");
 
 // goldfish controls
 const bodyLength = document.getElementById("bodyLength");
@@ -256,11 +262,18 @@ const afinLength = document.getElementById("afinLength");
 const afinWidth = document.getElementById("afinWidth");
 const afinShift = document.getElementById("afinShift");
 const fishColor = document.getElementById("fishColor");
+const fishSaturation = document.getElementById("fishSaturation");
+const fishValue = document.getElementById("fishValue");
+const fishNoise = document.getElementById("fishNoise");
+const fishSecondaryHue = document.getElementById("fishSecondaryHue");
 const fishCountSlider = document.getElementById("fishCount");
 const fishSpeedSlider = document.getElementById("fishSpeed");
 const dropFoodBtn = document.getElementById("dropFoodBtn");
 const viewModeToggle = document.getElementById("viewModeToggle");
 let isFocusView = false;
+let isSlidingFish = false;
+let fishColorShift = +fishColor.value;
+const mobileQuery = window.matchMedia("(max-width: 768px)");
 
 // Function to read the currently checked value from a radio group
 const getRadioValue = (group) => {
@@ -322,6 +335,7 @@ function readGoldfishParams() {
 function regenerateGoldfish() {
   const params = readGoldfishParams();
   regenerateGoldfishGeometry(gl, gfish.geometry, params);
+  boidSys.setBounds(fishBounds());
 }
 
 /**
@@ -376,6 +390,27 @@ function initGoldfishUI() {
 // Initialize the goldfish UI handlers immediately
 initGoldfishUI();
 
+fishColor?.addEventListener("input", () => {
+  fishColorShift = +fishColor.value;
+});
+fishSaturation?.addEventListener("input", () => gfish.setSaturation(+fishSaturation.value));
+fishValue?.addEventListener("input", () => gfish.setValue(+fishValue.value));
+fishNoise?.addEventListener("input", () => gfish.setNoise(+fishNoise.value));
+fishSecondaryHue?.addEventListener("input", () => gfish.setSecondaryHue(+fishSecondaryHue.value));
+
+// On mobile, show the inspect view while a fish shape slider is held
+document.querySelectorAll('#section-fish input[type="range"]').forEach((slider) => {
+  if (slider === fishCountSlider || slider === fishSpeedSlider) return;
+  slider.addEventListener("pointerdown", () => {
+    if (mobileQuery.matches) isSlidingFish = true;
+  });
+});
+["pointerup", "pointercancel", "touchend", "touchcancel"].forEach((type) =>
+  window.addEventListener(type, () => {
+    isSlidingFish = false;
+  })
+);
+
 // Event listeners for boid system
 if (fishCountSlider) {
     fishCountSlider.addEventListener("input", () => {
@@ -419,9 +454,11 @@ window.addEventListener("keydown", (e) => {
 
 
 /* ---------- Orbit camera ---------- */
+// Phones start further out so more of the tank fits the narrow screen
+const DEFAULT_CAM_R = mobileQuery.matches ? 4.6 : 3.4;
 const cam = {
   target: [0, 0.9, 0],
-  r: 3.4,
+  r: DEFAULT_CAM_R,
   az: Math.PI * 1.5,
   el: 0.09,
   minR: 1.1,
@@ -449,7 +486,28 @@ let isDragging = false,
 const ROT_SPEED = 0.005,
   EL_SPEED = 0.003,
   ZOOM_SPEED = 0.0015;
+
+// Fingers currently on the canvas, two of them pinch to zoom
+const activePointers = new Map();
+let pinching = false;
+let pinchDist = 0;
+
+function pointerSpread() {
+  const [a, b] = [...activePointers.values()];
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 canvas.addEventListener("pointerdown", (e) => {
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (activePointers.size === 2) {
+    // a second finger turns the drag into a pinch
+    pinching = true;
+    isDragging = false;
+    pinchDist = pointerSpread();
+  }
+  canvas.setPointerCapture(e.pointerId);
+  if (pinching) return;
+
   isDragging = true;
   lastX = e.clientX;
   lastY = e.clientY;
@@ -459,6 +517,19 @@ canvas.addEventListener("pointerdown", (e) => {
   canvas.style.cursor = "grabbing";
 });
 canvas.addEventListener("pointermove", (e) => {
+  if (activePointers.has(e.pointerId)) {
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+  if (pinching && activePointers.size === 2) {
+    // fingers moving apart zoom in, together zoom out
+    const d = pointerSpread();
+    if (pinchDist > 0 && d > 0) {
+      cam.r = Math.max(cam.minR, Math.min(cam.maxR, cam.r * (pinchDist / d)));
+      cam.vR = 0;
+    }
+    pinchDist = d;
+    return;
+  }
   if (!isDragging) return;
   const dx = e.clientX - lastX,
     dy = e.clientY - lastY;
@@ -467,10 +538,23 @@ canvas.addEventListener("pointermove", (e) => {
   cam.vAz += dx * ROT_SPEED;
   cam.vEl += dy * EL_SPEED;
 });
+canvas.addEventListener("pointercancel", (e) => {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) pinching = false;
+  isDragging = false;
+  canvas.style.cursor = "grab";
+});
 canvas.addEventListener("pointerup", (e) => {
+  const wasPinching = pinching;
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) pinching = false;
+
   isDragging = false;
   canvas.releasePointerCapture(e.pointerId);
   canvas.style.cursor = "grab";
+
+  // lifting a finger after a pinch is not a click
+  if (wasPinching || activePointers.size > 0) return;
 
   const dx = e.clientX - clickStartX;
   const dy = e.clientY - clickStartY;
@@ -505,7 +589,7 @@ canvas.addEventListener(
   { passive: false }
 );
 document.getElementById("resetCam")?.addEventListener("click", () => {
-  cam.r = 3.4;
+  cam.r = DEFAULT_CAM_R;
   cam.az = Math.PI * 1.5;
   cam.el = 0.09;
   cam.vAz = cam.vEl = cam.vR = 0;
@@ -537,26 +621,53 @@ const tankGlass = createTankGlassLayer(gl);
 const shells = createShellLayer(gl);
 const crab = createCrabLayer(gl);
 const discoLights = createDiscoLights();
+const discoPass = createDiscoPass(gl);
+const sun = createSunLayer(gl);
 
-// Generate random position for treasure chest
+// Sun floats above a back corner of the tank, away from the default camera
+const SUN_RADIUS = 0.26;
+function sunPosition() {
+  return [TANK_X_HALF * 0.7, TANK_HEIGHT + 0.85, TANK_Z_HALF * 0.7];
+}
+
+// Generate random position for treasure chest, or null if it cannot fit
 function generateChestPosition() {
-  const chestRadius = 0.35;
+  const chestRadius = 0.42; // covers the chest at any rotation with the lid open
+  clearObjectsByType("chest");
   const pos = findValidPosition(chestRadius, 100, 0.1);
   if (pos) {
     registerObject(pos.x, pos.z, chestRadius, "chest");
     return [pos.x, -0.05, pos.z];
   }
-  // Fallback to a safe position if random placement fails
-  return [TANK_BOUNDS.xMax * 0.6, -0.05, TANK_BOUNDS.zMax * 0.3];
+  return null;
 }
 
-const chestPos = generateChestPosition();
+const initialChestPos = generateChestPosition();
+let chestVisible = !!initialChestPos;
+const chestPos = initialChestPos || [0, -0.05, 0];
 
 const chestLayer = createTreasureChestLayer(gl, {
   position: chestPos,
   spawnBubble: bubbles.spawnBubble,
 });
+// Move the chest to a new free spot, hiding it when none exists
+function placeChest() {
+  const newChestPos = generateChestPosition();
+  chestVisible = !!newChestPos;
+  if (!newChestPos) return;
+  chestPos[0] = newChestPos[0];
+  chestPos[1] = newChestPos[1];
+  chestPos[2] = newChestPos[2];
+  chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
+}
+
 const FOG = { color: [0.02, 0.07, 0.13], near: 2.0, far: 5.5 };
+const BASE_FOG = [...FOG.color];
+const DISCO_FOG = [0.005, 0.01, 0.02];
+
+// 0 normal scene, 1 full disco look, eased so the switch fades
+let discoMorph = 0;
+let discoGlowHue = 0;
 floor.setFog(FOG.color, FOG.near, FOG.far);
 
 /* ---------- UI wiring ---------- */
@@ -735,17 +846,17 @@ if (scatterBtn)
 if (regenBtn)
   regenBtn.addEventListener("click", () => {
     resetCollisionState();
-    const newChestPos = generateChestPosition();
-    chestPos[0] = newChestPos[0];
-    chestPos[1] = newChestPos[1];
-    chestPos[2] = newChestPos[2];
-    chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
+    placeChest();
     driftwood.regenerate();
+    fishHouse.regenerate();
     boulders.regenerate();
     barclaya.regenerate();
     coral.regenerate();
+    fanCoral.regenerate();
+    staghornCoral.regenerate();
     egeria.regenerate();
     grass.regenerate();
+    shells.regenerate();
   });
 
 woodPieces?.addEventListener("input", () => {
@@ -824,11 +935,7 @@ if (boulderRegenerate)
 if (chestRegenerate)
   chestRegenerate.addEventListener("click", () => {
     resetCollisionState();
-    const newChestPos = generateChestPosition();
-    chestPos[0] = newChestPos[0];
-    chestPos[1] = newChestPos[1];
-    chestPos[2] = newChestPos[2];
-    chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
+    placeChest();
     driftwood.regenerate();
     boulders.regenerate();
     barclaya.regenerate();
@@ -925,6 +1032,7 @@ if (shellsRegenerate)
 if (discoModeToggle)
   discoModeToggle.addEventListener("change", () => {
     discoLights.setEnabled(discoModeToggle.checked);
+    boidSys.stuntsEnabled = discoModeToggle.checked;
   });
 
 floorGravelMix?.addEventListener("input", () =>
@@ -951,28 +1059,35 @@ palRainbow?.addEventListener(
   () => palRainbow.checked && floor.setPalette("rainbow")
 );
 
-tankSize?.addEventListener("input", () => {
+// Rebuilding the tank is expensive, so slider events are applied once per frame
+let tankResizePending = false;
+function scheduleTankResize() {
+  if (tankResizePending) return;
+  tankResizePending = true;
+  requestAnimationFrame(() => {
+    tankResizePending = false;
+    applyTankSize();
+  });
+}
+tankSize?.addEventListener("input", scheduleTankResize);
+tankHeight?.addEventListener("input", scheduleTankResize);
+
+function applyTankSize() {
   setTankSize(+tankSize.value);
+  setTankHeight(+(tankHeight?.value ?? 1.8));
+  waterSurface.setHeight(TANK_HEIGHT);
+  boidSys.waterY = TANK_HEIGHT;
+  cam.target[1] = TANK_HEIGHT * 0.5;
   
-  const sizeFac = (+tankSize.value / 50.0) * 0.9;
-  boidSys.setBounds(
-    {
-      minX: -2.6 * sizeFac, maxX: 2.6 * sizeFac,
-      minY: 0.0, maxY: 2.0,
-      minZ: -2.2 * sizeFac, maxZ: 2.2 * sizeFac 
-    }
-  );
+  boidSys.setBounds(fishBounds());
+  updateLeapRoom();
   floor.regenerate();
   waterSurface.regenerate();
   tankGlass.regenerate();
   // Update tank bounds with the new dimensions from tankFloor
   updateTankBounds(TANK_X_HALF, TANK_Z_HALF);
   resetCollisionState();
-  const newChestPos = generateChestPosition();
-  chestPos[0] = newChestPos[0];
-  chestPos[1] = newChestPos[1];
-  chestPos[2] = newChestPos[2];
-  chestLayer.setPosition(newChestPos[0], newChestPos[1], newChestPos[2]);
+  placeChest();
   driftwood.regenerate();
   boulders.regenerate();
   fishHouse.regenerate();
@@ -982,7 +1097,8 @@ tankSize?.addEventListener("input", () => {
   coral.regenerate();
   fanCoral.regenerate();
   staghornCoral.regenerate();
-});
+  shells.regenerate();
+}
 
 // last frame's shared data so click handler can use camera + floor height
 let lastShared = null;
@@ -1013,7 +1129,7 @@ function handleWorldClick(worldPos) {
   const dxC = x - chestPos[0];
   const dzC = z - chestPos[2];
   const distChest = Math.hypot(dxC, dzC);
-  if (distChest < 0.45) {
+  if (chestVisible && distChest < 0.45) {
     // chest click: big bubble burst + random treasure
     spawnBubbleBurstAt(chestPos[0], chestPos[2], chestPos[1] + 0.05, 16, 0.06);
     chestLayer.setTreasureAmount(Math.random()); // 0..1 tweak
@@ -1103,6 +1219,21 @@ function rayPlaneY(origin, dir, yPlane) {
   ];
 }
 
+// Largest fish size given to the swimming fish
+const FISH_MAX_SIZE = 0.2;
+
+// Swim area that keeps whole fish inside the glass, including the swimming wave
+function fishBounds() {
+  const reach = ((gfish.geometry.reach ?? 1.5) + 0.1) * FISH_MAX_SIZE;
+  const xLim = Math.max(0, TANK_X_HALF - reach);
+  const zLim = Math.max(0, TANK_Z_HALF - reach);
+  return {
+    minX: -xLim, maxX: xLim,
+    minY: 0.0, maxY: TANK_HEIGHT + 0.2,
+    minZ: -zLim, maxZ: zLim,
+  };
+}
+
 // Simple hash for deterministic "random" numbers based on an index
 function hash11(i) {
     return (Math.sin(i * 12.9898) * 43758.5453) % 1;
@@ -1116,11 +1247,7 @@ const boidSys = new BoidSystem(
     cohesion: 0.05,
     boundaryForce: 1.0
   },
-  {
-    minX: -2.6, maxX: 2.6,
-    minY: 0.0, maxY: 2.0,
-    minZ: -2.2, maxZ: 2.2
-  },
+  fishBounds(),
   {
     maxSpeed: 0.005,
     maxForce: 0.0004
@@ -1131,14 +1258,46 @@ const boidSys = new BoidSystem(
   }
 );
 
+boidSys.waterY = TANK_HEIGHT;
+
+// Fish only leap out of the water when the tank has room for the arc
+function updateLeapRoom() {
+  boidSys.leapAllowed = TANK_X_HALF >= 2.0 && TANK_Z_HALF >= 1.7;
+}
+updateLeapRoom();
+
 const fishData = {
     pos: [],
     rotY: [],
     size: [],
     speed: [],
     colorVar: [],
+    pitch: [],
     count: 0
 };
+
+// Halo for each fish in disco mode, reused every frame
+const fishGlow = [];
+
+// Approximate body colour of a fish, matching the palette in the fish shader
+function fishGlowColor(colorVar, out) {
+  const t = 0.5 + colorVar * 0.2;
+  const d = [0.0, 0.33, 0.67 + colorVar * 0.1];
+  for (let i = 0; i < 3; i++) out[i] = 0.5 + 0.5 * Math.cos(6.283185 * (t + d[i]));
+  const lum = 0.299 * out[0] + 0.587 * out[1] + 0.114 * out[2];
+  const sat = +(fishSaturation?.value ?? 1);
+  const val = +(fishValue?.value ?? 1);
+  for (let i = 0; i < 3; i++) out[i] = Math.min(1, Math.max(0, (lum + (out[i] - lum) * sat) * val));
+}
+
+// Ring of bubbles where a leaping fish breaks the surface
+function spawnSplash(p) {
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const r = randRange(0.06, 0.12);
+    bubbles.spawnBubble(p.x + Math.cos(a) * r, p.y - randRange(0.05, 0.25), p.z + Math.sin(a) * r);
+  }
+}
 
 const foodCube = createSimpleCube(gl);
 
@@ -1163,6 +1322,7 @@ let last = performance.now(),
 
   resizeCanvasToDisplaySize(canvas);
   gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(FOG.color[0], FOG.color[1], FOG.color[2], 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   // Projection & camera
@@ -1202,6 +1362,17 @@ let last = performance.now(),
     ? floor.getParams()
     : { amp: 0.18, scale: 0.9, yOffset: -0.03 };
 
+  // Disco look fades in and out over a moment
+  const discoTarget = discoLights.isEnabled() ? 1 : 0;
+  const discoStep = Math.min(Math.abs(discoTarget - discoMorph), dt / 0.8);
+  discoMorph += Math.sign(discoTarget - discoMorph) * discoStep;
+  if (discoLights.isEnabled()) discoGlowHue = (discoGlowHue + DISCO_GLOW_HUE_RATE * dt) % 1.0;
+  for (let i = 0; i < 3; i++) FOG.color[i] = BASE_FOG[i] + (DISCO_FOG[i] - BASE_FOG[i]) * discoMorph;
+
+  // Disco beams shine from the ball that replaces the sun
+  const ballPos = sunPosition();
+  discoLights.setRig(ballPos, TANK_X_HALF, TANK_Z_HALF, fp.yOffset - 0.05);
+
   // Update disco lights
   discoLights.update(t);
   const discoLightsArray = discoLights.getLights();
@@ -1223,16 +1394,23 @@ let last = performance.now(),
     camPos: eye,
     discoLights: discoLightsArray,
     discoSpotlights: discoSpotlightsArray,
+    decorCeiling: decorCeiling(),
+    sceneBright: 1.0 - 0.75 * discoMorph,
+    discoGlow: discoMorph,
+    discoGlowHue,
   };
 
   lastShared = shared;
 
-  // draw
+  // draw, into the offscreen disco target while disco is fading in or on
+  const useDiscoPass = discoMorph > 0.001;
+  if (useDiscoPass) discoPass.begin(canvas.width, canvas.height);
+  else discoPass.release();
+
   floor.draw(shared);
   if (showWood?.checked !== false) driftwood.draw(shared);
   if (showBoulders?.checked !== false) boulders.draw(shared);
   if (showFishHouse?.checked !== false) fishHouse.draw(shared);
-  if (showGrass?.checked !== false) grass.draw(shared);
   if (showEgeria?.checked !== false) egeria.draw(shared);
   if (showBarclaya?.checked !== false) barclaya.draw(shared);
   if (showCoral?.checked !== false) {
@@ -1240,12 +1418,16 @@ let last = performance.now(),
     fanCoral.draw(shared);
     staghornCoral.draw(shared);
   }
-  if (showChest?.checked !== false) chestLayer.draw(shared);
+  if (showChest?.checked !== false && chestVisible) chestLayer.draw(shared);
   if (showShells?.checked !== false) shells.draw(shared);
   if (showCrab?.checked !== false) crab.draw(shared);
 
   boidSys.update(dt);
   const boids = boidSys.getBoidPositions();
+
+  // splash bubbles where leaping fish cross the surface
+  for (const splash of boidSys.splashes) spawnSplash(splash);
+  boidSys.splashes.length = 0;
 
   // Reset arrays
   fishData.pos.length = 0;
@@ -1253,18 +1435,25 @@ let last = performance.now(),
   fishData.size.length = 0;
   fishData.speed.length = 0;
   fishData.colorVar.length = 0;
+  fishData.pitch.length = 0;
 
-  if (isFocusView) {
+  // Disco mode cycles the fish palette
+  if (discoLights.isEnabled()) {
+    fishColorShift = (fishColorShift + DISCO_GLOW_HUE_RATE * dt) % 1.0;
+    fishColor.value = fishColorShift;
+  }
+
+  if (isFocusView || isSlidingFish) {
     fishData.pos.push(0, 0.9, 0);
     // spin animation
     fishData.rotY.push(t * 0.2); 
     
     fishData.size.push(1.0); 
     fishData.speed.push(0.5);
+    fishData.pitch.push(0.0);
     
     // uses average color
-    let colorShift = +fishColor.value;
-    fishData.colorVar.push(colorShift * 10.0 + 0.5);
+    fishData.colorVar.push(fishColorShift * 10.0 + 0.5);
     
     fishData.count = 1;
   }
@@ -1276,32 +1465,51 @@ let last = performance.now(),
       // Geometry Transforms
       fishData.pos.push(b.x, b.y, b.z);
       fishData.rotY.push(b.rotY);
+      fishData.pitch.push(b.pitch);
       
       const speed = (b.vx !== undefined) ? Math.hypot(b.vx, 0.0, b.vz) * 100 : 0.0;
       fishData.speed.push(Math.min(speed / 0.005, 1.0));
 
       // Stable Random Attributes based on Index
       const rand = Math.abs(hash11(i)); 
-      fishData.size.push(0.1 + Math.abs(hash11(rand)) * 0.1); // Hash again so similar color doesn't give us same size
-      let colorShift = +fishColor.value;
-      fishData.colorVar.push(rand + colorShift * 10.0);
+      fishData.size.push(0.1 + Math.abs(hash11(rand)) * (FISH_MAX_SIZE - 0.1)); // Hash again so similar color doesn't give us same size
+      fishData.colorVar.push(rand + fishColorShift * 10.0);
+
+      if (useDiscoPass) {
+        if (!fishGlow[i]) fishGlow[i] = { pos: [0, 0, 0], radius: 0, color: [0, 0, 0] };
+        const g = fishGlow[i];
+        g.pos[0] = b.x; g.pos[1] = b.y; g.pos[2] = b.z;
+        g.radius = fishData.size[i] * 2.2;
+        fishGlowColor(fishData.colorVar[i], g.color);
+      }
     }
 
     fishData.count = boids.length;
   }
   gfish.updateInstances(fishData);
 
-  if (boidSys.food) {
-      // Draw the cube at the food position
+  for (const food of boidSys.foods) {
+      // Draw a cube at each food position
       // We pass a simple rotation that spins over time [angle, axisX, axisY, axisZ]
       foodCube.draw(shared, 
-          [boidSys.food.x, boidSys.food.y, boidSys.food.z], 
+          [food.pos.x, food.pos.y, food.pos.z], 
           [t * 2.0, 1.0, 1.0, 0.0] // Spin on diagonal axis
       );
   }
 
   bubbles.draw(shared);
+
+  // darken the scene and light it with the beams, then draw what glows on top
+  if (useDiscoPass) discoPass.finish(shared, ballPos, discoSpotlightsArray, discoMorph);
+
+  if (showGrass?.checked !== false) grass.draw(shared);
   gfish.draw(shared);
+  sun.draw(shared, ballPos, SUN_RADIUS, discoMorph);
+  if (useDiscoPass && !isFocusView && !isSlidingFish) {
+    fishGlow.length = Math.min(fishGlow.length, boids.length);
+    discoPass.drawGlow(shared, fishGlow, 0.35 * discoMorph);
+  }
   waterSurface.draw(shared);
   tankGlass.draw(shared);
+  if (useDiscoPass) discoPass.drawBeams(shared, ballPos, discoSpotlightsArray, discoMorph, fp.yOffset);
 })();

@@ -1,5 +1,6 @@
 // bubbles.js
 import { vs, fs } from "./bubblesShaders.js";
+import { TANK_X_HALF, TANK_Z_HALF, TANK_HEIGHT } from "../../tank/tankFloor.js";
 
 const MAX_BUBBLES = 256;
 
@@ -170,7 +171,11 @@ export function createBubbleLayer(gl) {
       // small gentle expansion as it rises
       b.radius *= 1.0 + 0.1 * dt;
 
-      if (b.age < b.life && b.y < 1.8) {
+      // pop when finished, at the surface, or outside the glass
+      const inside =
+        Math.abs(b.x) < TANK_X_HALF - b.radius &&
+        Math.abs(b.z) < TANK_Z_HALF - b.radius;
+      if (b.age < b.life && b.y < TANK_HEIGHT && inside) {
         next.push(b);
       }
     }

@@ -1,13 +1,20 @@
 // plants/barclayaLongifolia.js
 import { vs, fs } from "./barclayaLongifoliaShaders.js";
 import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
-import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
+import {
+  TANK_X_HALF,
+  TANK_Z_HALF,
+  TANK_HEIGHT,
+  DEFAULT_TANK_HEIGHT,
+  decorCeiling,
+} from "../../tank/tankFloor.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 // ---- Noise + clump field ---------------------------------------------------
 const TANK = {
-  xHalf: TANK_X_HALF ?? 1.6,
-  zHalf: TANK_Z_HALF ?? 1.2,
-}; // overall footprint used for clump cells
+  get xHalf() { return TANK_X_HALF; },
+  get zHalf() { return TANK_Z_HALF; },
+}; // overall footprint used for clump cells, follows the live tank size
 const CLUMP = {
   cell: 1.9, // grid cell size → spacing between possible Barclaya clumps
   radius: 0.15, // how far rosettes spread from a clump center
@@ -21,11 +28,26 @@ const INNER_MARGIN = {
 };
 
 // Barclaya-specific "inside tank" that keeps bases away from glass
+// margin shrinks with small tanks so there is still room to plant
 function insideInnerAquascape(x, z) {
+  const mx = Math.min(INNER_MARGIN.x, TANK.xHalf * 0.35);
+  const mz = Math.min(INNER_MARGIN.z, TANK.zHalf * 0.35);
   return (
-    Math.abs(x) <= (TANK.xHalf - INNER_MARGIN.x) &&
-    Math.abs(z) <= (TANK.zHalf - INNER_MARGIN.z)
+    Math.abs(x) <= (TANK.xHalf - mx) &&
+    Math.abs(z) <= (TANK.zHalf - mz)
   );
+}
+
+// Whether a whole leaf stays inside the tank.
+// Matches the vertex shader: the leaf runs straight from its base along
+// mix(radial, up, pitch), and width, arch and ripple add sideways spread.
+function leafInsideTank(cx, cz, c) {
+  const flat = 1.0 - c.pitch;
+  const reach = (c.len * flat) / Math.hypot(flat, c.pitch);
+  const tipX = cx + Math.cos(c.yaw) * reach;
+  const tipZ = cz + Math.sin(c.yaw) * reach;
+  const spread = c.wid + c.arch + c.undul + 0.03;
+  return isInsideTank(cx, cz, spread) && isInsideTank(tipX, tipZ, spread);
 }
 
 // We treat +z as the **back wall**
@@ -89,6 +111,13 @@ const SAFETY = 1.05;
 function widthAtMid(wHalf, undulAmp, t) {
   const mid = Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, t))), 0.8);
   return (wHalf * mid + undulAmp) * 2.0; // full width
+}
+
+// Height of a leaf tip above its base, using the same frame as the vertex shader
+function leafTop(len, arch, pitch) {
+  const p = Math.min(1, Math.max(0, pitch));
+  const hyp = Math.hypot(1 - p, p) || 1;
+  return (len * p + arch * (1 - p)) / hyp;
 }
 
 function rOnGround(len, pitch, t) {
@@ -318,6 +347,7 @@ export function createBarclayaLayer(gl) {
   const inst = makeInstBufs(ribbon.attribs, 20000);
 
   // uniforms
+  const setSandUniforms = makeSandUniforms(gl, program);
   const U = (n) => gl.getUniformLocation(program, n);
   const u_proj = U("u_proj"),
     u_view = U("u_view"),
@@ -335,7 +365,7 @@ export function createBarclayaLayer(gl) {
     minLeaves: 5,
     maxLeaves: 11, // per rosette
     undulFreq: 22.0, // edge ripple frequency
-    spread: { x: TANK.xHalf * 0.95, z: TANK.zHalf * 0.95 }, // used for fallback singles
+    spread: 0.95, // fraction of the tank used for fallback singles
     redProb: 0.35, // chance a leaf is magenta-leaning
   };
 
@@ -353,14 +383,15 @@ export function createBarclayaLayer(gl) {
     const yawSeed = rand(0, Math.PI * 2);
     const localAccepted = [];
 
-    // global scale factor for this rosette
-    const heightScale = 0.7 + 0.9 * heightBias; // 0.7 .. 1.6
+    // global scale factor for this rosette, smaller in shorter tanks
+    const heightScale =
+      (0.7 + 0.9 * heightBias) * Math.min(1.0, TANK_HEIGHT / DEFAULT_TANK_HEIGHT); // 0.7 .. 1.6
 
     for (let i = 0; i < leaves; i++) {
       const baseLen = rand(0.65, 1.35);
-      const len = baseLen * heightScale;
+      let len = baseLen * heightScale;
 
-      const wid = len * rand(0.12, 0.2); // half-width
+      let wid = len * rand(0.12, 0.2); // half-width
 
       // more upright in the back, more recumbent in the front
       const pitchBase = rand(0.45, 0.95);
@@ -368,6 +399,14 @@ export function createBarclayaLayer(gl) {
 
       const arch = rand(0.04, 0.11);
       const undul = rand(0.01, 0.03);
+
+      // shrink leaves that would reach past the water
+      const top = leafTop(len, arch, pitch);
+      if (top > decorCeiling()) {
+        const fit = decorCeiling() / top;
+        len *= fit;
+        wid *= fit;
+      }
       const hueTweak = rand(-0.03, 0.03);
       const redness =
         Math.random() < state.redProb ? rand(0.55, 1.0) : rand(0.0, 0.35);
@@ -384,6 +423,7 @@ export function createBarclayaLayer(gl) {
         const neighbors = getNeighbors(grid, cx, cz, rBound);
 
         if (
+          leafInsideTank(cx, cz, cand) &&
           !collidesLocal(cand, localAccepted, cx, cz) &&
           !collidesGlobal(cand, cx, cz, neighbors)
         ) {
@@ -483,8 +523,8 @@ export function createBarclayaLayer(gl) {
     let attempts = 0;
     while (plantsPlaced < state.plants && attempts < maxPlantAttempts) {
       attempts++;
-      const cx = rand(-state.spread.x, state.spread.x);
-      const cz = rand(-state.spread.z, state.spread.z);
+      const cx = rand(-TANK.xHalf * state.spread, TANK.xHalf * state.spread);
+      const cz = rand(-TANK.zHalf * state.spread, TANK.zHalf * state.spread);
 
       const layoutBias = backCornerWeight(cx, cz);
       // Random rejection: front-center almost never gets chosen
@@ -502,8 +542,18 @@ export function createBarclayaLayer(gl) {
       }
     }
 
+    // tallest leaf, used to stay under the water on high dunes
+    tallest = 0;
+    for (let i = 0; i < d.count; i++) {
+      tallest = Math.max(
+        tallest,
+        leafTop(d.lenWidth[2 * i], d.curveUndul[2 * i], d.yawPitch[2 * i + 1])
+      );
+    }
+
     inst.update(d);
   }
+  let tallest = 0;
   regenerate();
 
   return {
@@ -531,6 +581,7 @@ export function createBarclayaLayer(gl) {
       if (cullWasOn) gl.disable(gl.CULL_FACE);
 
       gl.useProgram(program);
+      setSandUniforms(shared, tallest);
       gl.bindVertexArray(ribbon.vao);
 
       gl.uniformMatrix4fv(u_proj, false, shared.proj);

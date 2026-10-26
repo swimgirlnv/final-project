@@ -61,6 +61,7 @@ export function createSimpleCube(gl) {
     const fs = createShader(gl, gl.FRAGMENT_SHADER, FS);
     const prog = gl.createProgram();
     gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    gl.deleteShader(vs); gl.deleteShader(fs); // the linked program keeps what it needs
 
     // Cube Data
     const verts = new Float32Array([

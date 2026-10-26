@@ -108,11 +108,21 @@ float groundHeight(vec2 p){
   return dunes + pebble;
 }
 
-// moving caustics for sunny look
+// moving caustics for sunny look, warped and faded in patches so they do not tile
 float caustic(vec2 p){
-  float s1 = sin(p.x*9.0  + p.y*6.0  + u_time*1.4);
-  float s2 = sin(p.x*13.0 - p.y*11.0 + u_time*1.9);
-  return 0.5 + 0.5 * (s1 + s2) * 0.3;
+  vec2 w = p + 1.4 * (vec2(vnoise(p * 0.6 + vec2(0.0, u_time * 0.05)),
+                           vnoise(p * 0.6 + vec2(5.2, 1.7 - u_time * 0.05))) - 0.5);
+  float s1 = sin(w.x*9.0  + w.y*6.0  + u_time*1.4);
+  float s2 = sin(w.x*13.0 - w.y*11.0 + u_time*1.9);
+  float s3 = sin(-w.x*7.0 + w.y*10.0 + u_time*1.1);
+  float patchy = 0.4 + 0.6 * vnoise(p * 0.8 + vec2(9.1, 2.3));
+  return 0.5 + 0.5 * (s1 + s2 + s3) * 0.2 * patchy;
+}
+
+// rotates a point so noise cells do not line up with the tank axes
+vec2 rot2(vec2 p, float a){
+  float c = cos(a), s = sin(a);
+  return vec2(c*p.x - s*p.y, s*p.x + c*p.y);
 }
 
 void main(){
@@ -171,7 +181,9 @@ void main(){
 
   // micro speckling in the sand
   float sandNoise1 = hash12(p * 18.37);
-  float sandNoise2 = vnoise(p * 7.0);
+  vec2 sandWarp = vec2(vnoise(p * 1.8), vnoise(p * 1.8 + vec2(5.2, 1.7))) * 1.2 - 0.6;
+  float sandNoise2 = 0.6 * vnoise(rot2(p * 7.0, 0.6) + sandWarp)
+                   + 0.4 * vnoise(rot2(p * 4.3, -1.1) + vec2(3.1, 7.7));
   float sandT = clamp(0.35 + 0.4 * sandNoise1 + 0.25 * sandNoise2, 0.0, 1.0);
   vec3 sandBase = mix(u_sandA, u_sandB, sandT);
 

@@ -1,5 +1,7 @@
 import { vs, fs } from "./shellsShaders.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
+import { isInsideTank } from "../../sceneCollision.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 const MAX_SCALLOPS = 8;
 const MAX_AUGERS   = 4;
@@ -58,7 +60,13 @@ function makeMesh(gl, positions, normals, uvs, indices) {
     gl.STATIC_DRAW
   );
 
-  return { vao, count: indices.length };
+  // widest XZ extent at unit scale
+  let radius = 0;
+  for (let i = 0; i < positions.length; i += 3) {
+    radius = Math.max(radius, Math.hypot(positions[i], positions[i + 2]));
+  }
+
+  return { vao, count: indices.length, radius };
 }
 
 // --- Geometry: scallop fan shell -----------------------------------------
@@ -260,6 +268,7 @@ export function createShellLayer(gl) {
   gl.bindVertexArray(moonMesh.vao);
   const instMoon    = makeInstBuffers(gl, MAX_MOONS);
 
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj     = U("u_proj");
   const u_view     = U("u_view");
@@ -281,6 +290,15 @@ export function createShellLayer(gl) {
     return min + Math.random() * (max - min);
   }
 
+  // Retry random placements until the scaled shell fits inside the tank
+  function tryPlace(mesh, makeShell) {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const shell = makeShell();
+      if (isInsideTank(shell.x, shell.z, mesh.radius * shell.s)) return shell;
+    }
+    return null;
+  }
+
   // ---- place shells procedurally -------
   function initInstances() {
     const y = -0.02; // slightly buried into sand
@@ -290,16 +308,17 @@ export function createShellLayer(gl) {
 
     // fan scallops
     {
-      const count = state.scallopsCount;
       const shells = [];
-      for (let i = 0; i < count; i++) {
-        shells.push({
+      for (let i = 0; i < state.scallopsCount; i++) {
+        const shell = tryPlace(scallopMesh, () => ({
           x: rand(-spreadX, spreadX),
           z: centerZ + rand(-spreadZ * 0.15, spreadZ * 0.15),
           s: rand(0.12, 0.18),
           hue: rand(0.02, 0.06),
-        });
+        }));
+        if (shell) shells.push(shell);
       }
+      const count = shells.length;
       const offsets = new Float32Array(count * 3);
       const scales  = new Float32Array(count);
       const hues    = new Float32Array(count);
@@ -317,16 +336,17 @@ export function createShellLayer(gl) {
 
     // long auger shell
     {
-      const count = state.augersCount;
       const shells = [];
-      for (let i = 0; i < count; i++) {
-        shells.push({
+      for (let i = 0; i < state.augersCount; i++) {
+        const shell = tryPlace(augerMesh, () => ({
           x: rand(-spreadX, spreadX),
           z: centerZ + rand(-spreadZ * 0.2, spreadZ * 0.2),
           s: rand(0.18, 0.24),
           hue: rand(0.06, 0.10),
-        });
+        }));
+        if (shell) shells.push(shell);
       }
+      const count = shells.length;
       const offsets = new Float32Array(count * 3);
       const scales  = new Float32Array(count);
       const hues    = new Float32Array(count);
@@ -344,16 +364,17 @@ export function createShellLayer(gl) {
 
     // round moon shell
     {
-      const count = state.moonsCount;
       const shells = [];
-      for (let i = 0; i < count; i++) {
-        shells.push({
+      for (let i = 0; i < state.moonsCount; i++) {
+        const shell = tryPlace(moonMesh, () => ({
           x: rand(-spreadX, spreadX),
           z: centerZ + rand(-spreadZ * 0.15, spreadZ * 0.15),
           s: rand(0.18, 0.26),
           hue: rand(0.08, 0.12),
-        });
+        }));
+        if (shell) shells.push(shell);
       }
+      const count = shells.length;
       const offsets = new Float32Array(count * 3);
       const scales  = new Float32Array(count);
       const hues    = new Float32Array(count);
@@ -387,6 +408,7 @@ export function createShellLayer(gl) {
 
   function draw(shared) {
     gl.useProgram(prog);
+    setSandUniforms(shared);
 
     gl.uniformMatrix4fv(u_proj, false, shared.proj);
     gl.uniformMatrix4fv(u_view, false, shared.view);

@@ -1,3 +1,5 @@
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
+
 export const vs = `#version 300 es
 precision highp float;
 
@@ -7,6 +9,7 @@ in float a_part;   // 0 = body/head, 1 = legs+claws, 2 = shell
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
+${sandHeightGLSL}
 uniform vec3 u_worldPos;
 uniform float u_angle;
 uniform float u_time;
@@ -58,6 +61,7 @@ void main() {
 
   vec3 local = R * p;
   vec3 world = u_worldPos + local;
+  world.y += sandOffset(u_worldPos.xz);
 
   v_world  = world;
   v_local  = local;

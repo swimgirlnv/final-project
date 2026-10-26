@@ -1,4 +1,6 @@
 
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
+
 export const vs = `#version 300 es
 precision highp float;
 
@@ -6,9 +8,11 @@ in vec3 a_pos;
 in vec3 a_normal;
 in float a_height;   // 0 at base, ~1 near tips
 in float a_hue;
+in vec2 a_base;      // xz of the fan's root
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
+${sandHeightGLSL}
 uniform float u_time;
 
 out vec3 v_normalVS;
@@ -25,6 +29,7 @@ void main(){
   float sway = 0.03 * a_height * a_height;
   pos.x += sway * sin(u_time * 0.7 + pos.y * 6.0);
   pos.z += 0.5 * sway * cos(u_time * 0.6 + pos.y * 4.5);
+  pos.y = onSand(a_base, pos.y);
 
   // world position (fan geometry is already in world space)
   v_world  = pos;
@@ -90,8 +95,8 @@ void main(){
   vec3 warmB = vec3(0.96, 0.74, 0.50);
   vec3 warm  = mix(warmA, warmB, h);
 
-  vec3 hueTint = h2rgb(v_hue) * vec3(1.1, 0.85, 0.80);
-  vec3 base    = mix(warm, hueTint, 0.35);
+  vec3 hueTint = h2rgb(fract(v_hue)) * vec3(1.0, 0.75, 0.85);
+  vec3 base    = mix(warm, hueTint, 0.7);
 
   // darken near the base → fake ambient occlusion
   float ao = mix(0.45, 1.0, pow(h, 0.7));
@@ -117,7 +122,7 @@ void main(){
   float heightMask = smoothstep(0.45, 1.0, h);
   float polypMask  = dotShape * heightMask;
 
-  vec3 polypCol = h2rgb(v_hue + 0.12) * vec3(1.4, 1.15, 1.0);
+  vec3 polypCol = h2rgb(fract(v_hue + 0.12)) * vec3(1.4, 1.15, 1.0);
   vec3 col = mix(base, polypCol, polypMask * 0.45);
 
   // --- lighting -----------------------------------------------------

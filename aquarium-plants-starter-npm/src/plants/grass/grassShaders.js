@@ -1,4 +1,5 @@
 // grassShaders.js
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
 
 export const vs = `#version 300 es
 precision highp float;
@@ -19,6 +20,7 @@ in float i_yaw;        // random ribbon yaw (radians)
 // Uniforms
 uniform mat4 u_proj;
 uniform mat4 u_view;
+${sandHeightGLSL}
 uniform float u_time;
 uniform float u_currentStrength;
 uniform vec2  u_currentDir;
@@ -29,6 +31,7 @@ out float v_t;
 out vec3  v_color;
 out float v_camDist;
 out vec3  v_worldPos;
+out float v_hue;
 
 float hash11(float n){ return fract(sin(n)*43758.5453123); }
 
@@ -72,7 +75,7 @@ void main() {
   world.xz = i_base
            + lateral  * (sway + wobble)                 // motion sideways to current
            + widthDir * (a_pos.x * widthW);             // ribbon width in rotated facing
-  world.y  = t * H;
+  world.y  = t * H + sandOffset(i_base);
 
   // slight downstream drift (tip-weighted)
   world.xz += u_currentDir * (0.035 * hinge * sin(t*2.6 + i_phase + u_time));
@@ -88,6 +91,7 @@ void main() {
   vec3 c1 = h2rgb(i_hue) * vec3(0.80, 1.00, 0.90);
   v_color = mix(c0, c1, t);
   v_t = t;
+  v_hue = i_hue;
 }
 `;
 
@@ -98,6 +102,7 @@ in float v_t;
 in vec3  v_color;
 in float v_camDist;
 in vec3  v_worldPos;
+in float v_hue;
 out vec4 outColor;
 
 uniform float u_time;
@@ -119,8 +124,19 @@ uniform vec3 u_spotlightDir[4];
 uniform vec3 u_spotlightColor[4];
 uniform float u_spotlightAngle[4];
 
+// Disco glow amount and the hue offset that cycles over time
+uniform float u_glow;
+uniform float u_glowHue;
+
 // Subtle animated caustics
 float caustic(float x){ return 0.5 + 0.5*sin(x); }
+
+vec3 neonHue(float h){
+  float r = abs(h*6.0 - 3.0) - 1.0;
+  float g = 2.0 - abs(h*6.0 - 2.0);
+  float b = 2.0 - abs(h*6.0 - 4.0);
+  return clamp(vec3(r,g,b), 0.0, 1.0);
+}
 
 void main() {
   float c = 0.10 * caustic(v_t*24.0 + u_time*2.0)
@@ -161,8 +177,12 @@ void main() {
     col += spotContribution * 1.5;
   }
 
-  // Fog mix
-  float fog = smoothstep(u_fogNear, u_fogFar, v_camDist);
+  // Disco glow: bright neon blades, lighter toward the tips
+  vec3 neon = neonHue(fract(v_hue + u_glowHue + v_t * 0.25)) * (0.8 + 0.8 * v_t);
+  col = mix(col, neon + col * 0.3, u_glow);
+
+  // Fog mix, glowing blades stay visible further away
+  float fog = smoothstep(u_fogNear, u_fogFar, v_camDist) * (1.0 - 0.85 * u_glow);
   col = mix(col, u_fogColor, fog);
 
   outColor = vec4(col, 1.0);

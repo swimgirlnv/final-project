@@ -1,5 +1,6 @@
 // treasureChest.js
 import { vs, fs } from "./treasureChestShaders.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 export function createTreasureChestLayer(gl, opts = {}) {
   const spawnBubble = opts.spawnBubble || (() => {});
@@ -91,6 +92,40 @@ export function createTreasureChestLayer(gl, opts = {}) {
       baseIndex,     baseIndex + 1, baseIndex + 2,
       baseIndex,     baseIndex + 2, baseIndex + 3
     );
+  }
+
+  // ------------- treasure pile shape -----------------
+  const treasureSeed = Math.random() * 100.0;
+
+  function hashLattice(i, j) {
+    const h = Math.sin(i * 127.1 + j * 311.7 + treasureSeed) * 43758.5453;
+    return h - Math.floor(h);
+  }
+
+  function valueNoise(x, y) {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    const fx = x - ix;
+    const fy = y - iy;
+    const ux = fx * fx * (3 - 2 * fx);
+    const uy = fy * fy * (3 - 2 * fy);
+    const a = hashLattice(ix, iy);
+    const b = hashLattice(ix + 1, iy);
+    const c = hashLattice(ix, iy + 1);
+    const d = hashLattice(ix + 1, iy + 1);
+    return (a + (b - a) * ux) * (1 - uy) + (c + (d - c) * ux) * uy;
+  }
+
+  // Pile height 0..1 over the chest interior (u along width, v along depth)
+  // two lumpy crests along the width, sinking toward the chest walls
+  function treasureHeight(u, v) {
+    u = Math.min(1, Math.max(0, u));
+    v = Math.min(1, Math.max(0, v));
+    const wobble = 0.15 * Math.sin(Math.PI * v * 1.3 + treasureSeed);
+    const crests = 0.5 - 0.5 * Math.cos(2 * Math.PI * (2 * u + wobble));
+    const mound = Math.pow(Math.sin(Math.PI * v), 0.6) * (0.7 + 0.3 * Math.sin(Math.PI * u));
+    const lumps = valueNoise(u * 3 + treasureSeed, v * 2);
+    return mound * (0.6 * crests + 0.4 * lumps);
   }
 
  function buildMesh() {
@@ -278,119 +313,72 @@ export function createTreasureChestLayer(gl, opts = {}) {
   );
 
   // ---------------- TREASURE (kind=2, isLid=0) -----------------------
-  const tInsetX = 0.06;
-  const tInsetZ = 0.08;
+  // one subdivided plane with lumpy static displacement, like a pile of coins
+  const tInsetX = 0.02;
+  const tInsetZ = 0.02;
   const tX0 = x0 + tInsetX;
   const tX1 = x1 - tInsetX;
   const tZ0 = z0 + tInsetZ;
   const tZ1 = z1 - tInsetZ;
-  const tY0 = yBottom + 0.02;             // just above the real bottom
-  const tY1 = yTopBase * (0.4 + treasureAmount * 0.5); // height varies with amount
+  const tY1 = yTopBase * (0.4 + treasureAmount * 0.5); // pile level varies with amount
 
-  // Grid density varies with treasureAmount (min 2x2, max 10x6)
-  const cellsX = Math.max(2, Math.floor(2 + treasureAmount * 8));
-  const cellsZ = Math.max(2, Math.floor(2 + treasureAmount * 4));
-  const dx = (tX1 - tX0) / cellsX;
-  const dz = (tZ1 - tZ0) / cellsZ;
+  const SEG_X = 28;
+  const SEG_Z = 18;
+  const LUMP_HEIGHT = 0.11; // peak to trough
 
-  for (let ix = 0; ix < cellsX; ix++) {
-    for (let iz = 0; iz < cellsZ; iz++) {
-      const cx0 = tX0 + ix * dx;
-      const cx1 = cx0 + dx;
-      const cz0 = tZ0 + iz * dz;
-      const cz1 = cz0 + dz;
+  const base = mesh.pos.length / 3;
+  for (let j = 0; j <= SEG_Z; j++) {
+    for (let i = 0; i <= SEG_X; i++) {
+      const u = i / SEG_X;
+      const v = j / SEG_Z;
+      const e = 0.01;
+      const h = treasureHeight(u, v);
+      const dhdu = (treasureHeight(u + e, v) - treasureHeight(u - e, v)) / (2 * e);
+      const dhdv = (treasureHeight(u, v + e) - treasureHeight(u, v - e)) / (2 * e);
 
-      const hRand = 0.35 + 0.55 * Math.random();
-      const yTop = tY0 + (tY1 - tY0) * hRand;
+      // slope in world units turned into a surface normal
+      const sx = (dhdu * LUMP_HEIGHT) / (tX1 - tX0);
+      const sz = (dhdv * LUMP_HEIGHT) / (tZ1 - tZ0);
+      const nLen = Math.hypot(sx, 1, sz);
 
-      addQuad(
-        mesh,
-        cx0, yTop, cz0,
-        cx1, yTop, cz0,
-        cx1, yTop, cz1,
-        cx0, yTop, cz1,
-        0, 1, 0,
-        0, 0, 1, 0, 1, 1, 0, 1,
-        2.0, 0.0
+      mesh.pos.push(
+        tX0 + (tX1 - tX0) * u,
+        tY1 - 0.03 + LUMP_HEIGHT * h,
+        tZ0 + (tZ1 - tZ0) * v
       );
+      mesh.norm.push(-sx / nLen, 1 / nLen, -sz / nLen);
+      mesh.uv.push(u, v);
+      mesh.kind.push(2.0);
+      mesh.isLid.push(0.0);
     }
   }
-
-  // little gem prism on top of the pile (still kind=2)
-  const gX0 = tX1 - 0.05;
-  const gX1 = tX1 - 0.01;
-  const gZ0 = tZ1 - 0.05;
-  const gZ1 = tZ1 - 0.01;
-  const gY0 = tY0 + 0.02;
-  const gY1 = gY0 + 0.10;
-
-  // front
-  addQuad(
-    mesh,
-    gX0, gY0, gZ1,
-    gX1, gY0, gZ1,
-    gX1, gY1, gZ1,
-    gX0, gY1, gZ1,
-    0, 0, 1,
-    0, 0, 1, 0, 1, 1, 0, 1,
-    2.0, 0.0
-  );
-  // back
-  addQuad(
-    mesh,
-    gX1, gY0, gZ0,
-    gX0, gY0, gZ0,
-    gX0, gY1, gZ0,
-    gX1, gY1, gZ0,
-    0, 0, -1,
-    0, 0, 1, 0, 1, 1, 0, 1,
-    2.0, 0.0
-  );
-  // left
-  addQuad(
-    mesh,
-    gX0, gY0, gZ0,
-    gX0, gY0, gZ1,
-    gX0, gY1, gZ1,
-    gX0, gY1, gZ0,
-    -1, 0, 0,
-    0, 0, 1, 0, 1, 1, 0, 1,
-    2.0, 0.0
-  );
-  // right
-  addQuad(
-    mesh,
-    gX1, gY0, gZ1,
-    gX1, gY0, gZ0,
-    gX1, gY1, gZ0,
-    gX1, gY1, gZ1,
-    1, 0, 0,
-    0, 0, 1, 0, 1, 1, 0, 1,
-    2.0, 0.0
-  );
-  // top
-  addQuad(
-    mesh,
-    gX0, gY1, gZ0,
-    gX1, gY1, gZ0,
-    gX1, gY1, gZ1,
-    gX0, gY1, gZ1,
-    0, 1, 0,
-    0, 0, 1, 0, 1, 1, 0, 1,
-    2.0, 0.0
-  );
+  for (let j = 0; j < SEG_Z; j++) {
+    for (let i = 0; i < SEG_X; i++) {
+      const a = base + j * (SEG_X + 1) + i;
+      const b = a + 1;
+      const c = a + (SEG_X + 1);
+      const d = c + 1;
+      mesh.idx.push(a, c, b, b, c, d);
+    }
+  }
 
   return mesh;
 }
 
   let mesh = buildMesh();
 
+  // highest point of the chest with the lid fully open
+  const CHEST_TOP = H + D + 0.05;
+
   // ------------- buffers / VAO -----------------
   let vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
 
+  let buffers = [];
+
   function vbuf(data, loc, size) {
     const b = gl.createBuffer();
+    buffers.push(b);
     gl.bindBuffer(gl.ARRAY_BUFFER, b);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(loc);
@@ -400,7 +388,9 @@ export function createTreasureChestLayer(gl, opts = {}) {
 
   function rebuildBuffers() {
     gl.bindVertexArray(vao);
-    
+    buffers.forEach((b) => gl.deleteBuffer(b));
+    buffers = [];
+
     vbuf(mesh.pos,   0, 3);
     vbuf(mesh.norm,  1, 3);
     vbuf(mesh.uv,    2, 2);
@@ -408,6 +398,7 @@ export function createTreasureChestLayer(gl, opts = {}) {
     vbuf(mesh.isLid, 4, 1);
 
     const ib = gl.createBuffer();
+    buffers.push(ib);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
     gl.bufferData(
       gl.ELEMENT_ARRAY_BUFFER,
@@ -426,11 +417,13 @@ export function createTreasureChestLayer(gl, opts = {}) {
     a_isLid:  4,
   });
 
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj      = U("u_proj");
   const u_view      = U("u_view");
   const u_model     = U("u_model");
   const u_time      = U("u_time");
+  const u_camPos    = U("u_camPos");
   const u_lidAngle  = U("u_lidAngle");
   const u_hingeYZ   = U("u_hingeYZ");
   const u_fogColor  = U("u_fogColor");
@@ -546,6 +539,7 @@ export function createTreasureChestLayer(gl, opts = {}) {
       update(shared.time);
 
       gl.useProgram(prog);
+      setSandUniforms(shared, CHEST_TOP);
       gl.bindVertexArray(vao);
 
       // Disable back-face culling ONLY for the chest, so it's always visible.
@@ -556,6 +550,7 @@ export function createTreasureChestLayer(gl, opts = {}) {
       gl.uniformMatrix4fv(u_view,  false, shared.view);
       gl.uniformMatrix4fv(u_model, false, model);
       gl.uniform1f(u_time, shared.time);
+      gl.uniform3f(u_camPos, shared.camPos[0], shared.camPos[1], shared.camPos[2]);
       gl.uniform1f(u_lidAngle, lidAngle);
       gl.uniform2f(u_hingeYZ, hingeY, hingeZ);
 

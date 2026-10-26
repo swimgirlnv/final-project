@@ -7,7 +7,14 @@ import {
   registerObject,
   clearObjectsByType,
 } from "../../sceneCollision.js";
-import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
+import {
+  TANK_X_HALF,
+  TANK_Z_HALF,
+  TANK_HEIGHT,
+  DEFAULT_TANK_HEIGHT,
+  decorCeiling,
+} from "../../tank/tankFloor.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 const CLUMP = {
   cell: 0.6, // bigger cells → fewer clump centers across the tank
@@ -17,6 +24,8 @@ const CLUMP = {
 };
 
 const STEM_SLICES = 4;
+// Longest leaf pointing straight up, so stems stop early enough for leaves to stay underwater
+const LEAF_REACH = 0.28;
 
 const TANK = {
   xHalf: TANK_X_HALF ?? 1.6,
@@ -229,6 +238,7 @@ export function createEgeriaLayer(gl) {
   const inst = makeInstBufs(gl, ribbon.attribs, EGERIA_MAX_INSTANCES);
 
   // uniforms
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj = U("u_proj"),
     u_view = U("u_view"),
@@ -264,9 +274,14 @@ export function createEgeriaLayer(gl) {
 
     const seed = Math.random() * 1000.0;
     const stemRadius = 0.04; // footprint used for both clumps and singles
+    const leafReach = 0.3;   // how far leaves can spread from the stem, kept off the glass
 
     const HALF_X = TANK_X_HALF;
     const HALF_Z = TANK_Z_HALF;
+
+    // shorter tanks grow shorter plants, and no stem grows past the water
+    const heightFit = Math.min(1.0, TANK_HEIGHT / DEFAULT_TANK_HEIGHT);
+    const topLimit = decorCeiling() - LEAF_REACH;
 
     // Build a coarse grid of potential clump centers
     const nx = Math.max(1, Math.floor((2 * HALF_X) / CLUMP.cell));
@@ -320,7 +335,7 @@ export function createEgeriaLayer(gl) {
           const bz = cz + r * Math.sin(ang);
 
           // respect tank shape + collisions
-          if (!insideTankRect(bx, bz, stemRadius)) continue;
+          if (!insideTankRect(bx, bz, leafReach)) continue;
           if (checkCollision2D(bx, bz, stemRadius, 0.0)) continue;
           registerObject(bx, bz, stemRadius, "egeria");
 
@@ -337,7 +352,8 @@ export function createEgeriaLayer(gl) {
 
           for (let i = 0; i < nodes; i++) {
             const seg =
-              (0.1 + 0.02 * Math.max(0.0, 1.0 - i / nodes)) * heightScale;
+              (0.1 + 0.02 * Math.max(0.0, 1.0 - i / nodes)) * heightScale * heightFit;
+            if (y + seg > topLimit) break;
 
             // move up along the central axis
             y += seg;
@@ -358,7 +374,9 @@ export function createEgeriaLayer(gl) {
                 const d =
                   (0.08 + 0.015 * Math.max(0.0, 1.0 - j / sideN)) *
                   0.85 *
-                  heightScale;
+                  heightScale *
+                  heightFit;
+                if (y2 + d > topLimit) break;
                 // side branch stem segment
                 pushStem(data, [bx, bz], y2, d, hue);
                 y2 += d;
@@ -397,7 +415,7 @@ export function createEgeriaLayer(gl) {
       const bx = rand(-HALF_X, HALF_X);
       const bz = rand(-HALF_Z * 0.1, HALF_Z); // mostly mid → back
 
-      if (!insideTankRect(bx, bz, stemRadius)) continue;
+      if (!insideTankRect(bx, bz, leafReach)) continue;
       if (checkCollision2D(bx, bz, stemRadius, 0.0)) continue;
 
       // slight corner bias for singles too (but weaker)
@@ -419,7 +437,8 @@ export function createEgeriaLayer(gl) {
       let maxY = 0.0;
 
       for (let i = 0; i < nodes; i++) {
-        const seg = (0.1 + 0.02 * Math.max(0.0, 1.0 - i / nodes)) * heightScale;
+        const seg = (0.1 + 0.02 * Math.max(0.0, 1.0 - i / nodes)) * heightScale * heightFit;
+        if (y + seg > topLimit) break;
         y += seg;
         maxY = y;
 
@@ -436,8 +455,15 @@ export function createEgeriaLayer(gl) {
       singles++;
     }
 
+    // tallest point of any stem or leaf, used to stay under the water on high dunes
+    tallest = 0;
+    for (let i = 0; i < data.originYLen.length; i += 2) {
+      tallest = Math.max(tallest, data.originYLen[i] + data.originYLen[i + 1]);
+    }
+
     inst.update(gl, data);
   }
+  let tallest = 0;
   regenerate();
 
   return {
@@ -457,6 +483,7 @@ export function createEgeriaLayer(gl) {
     draw(shared) {
       if (inst.count === 0) return;
       gl.useProgram(prog);
+      setSandUniforms(shared, tallest);
       gl.bindVertexArray(ribbon.vao);
       gl.uniformMatrix4fv(u_proj, false, shared.proj);
       gl.uniformMatrix4fv(u_view, false, shared.view);

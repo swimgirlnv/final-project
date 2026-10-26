@@ -2,6 +2,7 @@
 import { vs, fs } from "./crabShaders.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
 import { checkCollision2D } from "../../sceneCollision.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 function compile(gl, type, src) {
   const sh = gl.createShader(type);
@@ -166,6 +167,7 @@ export function createCrabLayer(gl) {
 
   const mesh = makeHermitCrabMesh(gl);
 
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj = U("u_proj");
   const u_view = U("u_view");
@@ -291,6 +293,7 @@ export function createCrabLayer(gl) {
     if (wasCull) gl.disable(gl.CULL_FACE);
 
     gl.useProgram(prog);
+    setSandUniforms(shared);
     gl.bindVertexArray(mesh.vao);
 
     gl.uniformMatrix4fv(u_proj, false, shared.proj);

@@ -1,4 +1,5 @@
 // treasureChestShaders.js
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
 
 export const vs = `#version 300 es
 precision highp float;
@@ -11,6 +12,7 @@ in float a_isLid;  // 1 = lid, 0 = base/treasure
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
+${sandHeightGLSL}
 uniform mat4 u_model;
 uniform float u_time;
 uniform float u_lidAngle;    // 0 = closed, ~1.2 rad = open
@@ -53,6 +55,7 @@ void main() {
     nrm = hn;
     }
   vec4 world = u_model * vec4(pos, 1.0);
+  world.y = onSand(u_model[3].xz, world.y);
   v_world = world.xyz;
 
   v_normal = mat3(u_model) * normalize(nrm);
@@ -79,17 +82,11 @@ uniform vec3  u_fogColor;
 uniform float u_fogNear;
 uniform float u_fogFar;
 uniform float u_time;
+uniform vec3  u_camPos;
 
 // utility
 float hash21(vec2 p){
   return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123);
-}
-
-vec3 h2rgb(float h){
-  float r = abs(h*6.0 - 3.0) - 1.0;
-  float g = 2.0 - abs(h*6.0 - 2.0);
-  float b = 2.0 - abs(h*6.0 - 4.0);
-  return clamp(vec3(r,g,b), 0.0, 1.0);
 }
 
 void main() {
@@ -120,25 +117,31 @@ void main() {
 
     col = base * (0.4 + 0.8 * lam);
   } else {
-    // --- Treasure (coins + jewels) ---
-    float noise = hash21(v_world.xz * 9.7 + u_time * 0.3);
-    float type = step(0.5, noise); // 0 = coin, 1 = jewel
-
-    if (type < 0.5) {
-      // coin: warm gold
-      float sparkle = hash21(v_world.xz * 22.7 + u_time * 1.9);
-      vec3 gold = mix(vec3(1.00,0.88,0.46), vec3(1.00,0.96,0.70), sparkle);
-      float pulse = 0.4 + 0.6 * sin(u_time * 5.0 + sparkle * 20.0);
-      gold *= 0.7 + 0.5 * pulse;
-      col = gold * (0.5 + 0.8 * lam);
-    } else {
-      // jewel: bright colored gem
-      float h = hash21(v_world.xz * 17.3);
-      vec3 gem = h2rgb(h) * vec3(0.9,0.95,1.0);
-      float sparkle = hash21(v_uv * 40.0 + u_time * 3.3);
-      gem *= 0.75 + 0.35 * sparkle;
-      col = gem * (0.4 + 0.9 * lam);
+    // Treasure (shiny gold coins)
+    // two offset grids of round coins so they overlap like a pile
+    vec2 p = (v_world.xz + v_world.y * 0.5) * 22.0;
+    float coin = 0.0;
+    float rim = 0.0;
+    for (int layer = 0; layer < 2; layer++) {
+      vec2 q = p + float(layer) * vec2(0.5, 0.37);
+      vec2 cell = floor(q);
+      vec2 jitter = vec2(hash21(cell), hash21(cell + 7.1)) * 0.3 - 0.15;
+      float d = length(fract(q) - 0.5 - jitter);
+      coin = max(coin, smoothstep(0.42, 0.38, d));
+      rim = max(rim, smoothstep(0.30, 0.34, d) * smoothstep(0.42, 0.38, d));
     }
+
+    vec3 darkGold = vec3(0.45, 0.30, 0.06);
+    vec3 gold = vec3(1.00, 0.78, 0.30);
+    vec3 base = mix(darkGold, gold, coin);
+    base = mix(base, vec3(1.00, 0.90, 0.55), rim);
+
+    // specular highlight toward the camera
+    vec3 V = normalize(u_camPos - v_world);
+    vec3 Hv = normalize(L + V);
+    float spec = pow(max(dot(n, Hv), 0.0), 40.0);
+
+    col = base * (0.45 + 0.7 * lam) + vec3(1.0, 0.92, 0.7) * spec * (0.4 + 0.6 * coin);
   }
 
   // Slight darkening very close to sand

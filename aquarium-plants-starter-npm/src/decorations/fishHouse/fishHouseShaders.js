@@ -1,3 +1,5 @@
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
+
 export const vs = `#version 300 es
 precision highp float;
 
@@ -7,6 +9,7 @@ in vec2 a_uv;
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
+${sandHeightGLSL}
 uniform mat4 u_model;
 uniform float u_time;
 
@@ -31,6 +34,7 @@ void main(){
   }
 
   vec4 world = u_model * vec4(pos, 1.0);
+  world.y = onSand(u_model[3].xz, world.y);
   v_world = world.xyz;
 
   // Transform normals by model (good enough for small deformations)

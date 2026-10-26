@@ -1,6 +1,7 @@
 import { vs, fs } from "./staghornShaders.js";
 import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 export function createStaghornCoralLayer(gl) {
   function compile(type, src) {
@@ -137,6 +138,7 @@ export function createStaghornCoralLayer(gl) {
   gl.bindVertexArray(cyl.vao);
   const inst = makeInstBufs(512);
 
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj     = U("u_proj");
   const u_view     = U("u_view");
@@ -144,6 +146,7 @@ export function createStaghornCoralLayer(gl) {
   const u_fogColor = U("u_fogColor");
   const u_fogNear  = U("u_fogNear");
   const u_fogFar   = U("u_fogFar");
+  const u_camPos   = U("u_camPos");
 
   const state = {
     colonies: 6,
@@ -157,6 +160,9 @@ export function createStaghornCoralLayer(gl) {
   function rand(a, b) {
     return a + Math.random() * (b - a);
   }
+
+  // longest branch plus its radius and the lift at its base
+  const STAGHORN_TOP = 0.7;
 
   function scatter() {
     // Clear only staghorn objects from collision registry
@@ -245,6 +251,7 @@ export function createStaghornCoralLayer(gl) {
       if (inst.count === 0) return;
 
       gl.useProgram(prog);
+      setSandUniforms(shared, STAGHORN_TOP);
       gl.bindVertexArray(cyl.vao);
 
       // --- disable back-face culling just for staghorn branches ---
@@ -254,6 +261,7 @@ export function createStaghornCoralLayer(gl) {
       gl.uniformMatrix4fv(u_proj, false, shared.proj);
       gl.uniformMatrix4fv(u_view, false, shared.view);
       gl.uniform1f(u_time, shared.time);
+      gl.uniform3fv(u_camPos, shared.camPos);
 
       gl.uniform3f(
         u_fogColor,

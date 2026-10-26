@@ -1,3 +1,5 @@
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
+
 export const vs = `#version 300 es
 precision highp float;
 
@@ -14,6 +16,7 @@ in vec2  i_curveUndul;   // (arch curvature, edge undulation amplitude)
 in vec2  i_hueVar;       // (base hue tweak, redness 0..1)
 
 uniform mat4  u_proj, u_view;
+${sandHeightGLSL}
 uniform float u_time;
 uniform float u_currentStrength;
 uniform vec2  u_currentDir;
@@ -24,6 +27,7 @@ uniform float u_fogNear, u_fogFar;
 // What we send to the fragment shader
 out vec3  v_baseColor;
 out vec3  v_normalVS;
+out vec3  v_lightVS;
 out vec3  v_posVS;
 out vec2  v_leafCoord;   // (s along, w across)
 out float v_seed;
@@ -47,19 +51,18 @@ void main() {
   vec3 radial = vec3(cos(yaw), 0.0, sin(yaw));
   vec3 up     = vec3(0.0, 1.0, 0.0);
   vec3 tangent= normalize(mix(radial, up, pitch));        // axis along the leaf
-  vec3 ref    = abs(dot(tangent, up)) > 0.95 ? vec3(1,0,0) : up;
-  vec3 binorm = normalize(cross(tangent, ref));
+  vec3 binorm = vec3(-sin(yaw), 0.0, cos(yaw));            // across the leaf, always level
   vec3 normal = normalize(cross(binorm, tangent));
 
   // Length & width profile (wide mid, narrow base/tip)
   float L = i_lenWidth.x;
   float W = i_lenWidth.y;
-  float mid = pow(sin(3.14159265 * t), 0.8);              // 0 at ends, 1 mid
+  float mid = pow(max(sin(3.14159265 * t), 0.0), 0.8);   // 0 at ends, 1 mid
   float width = W * mid;
 
-  // Ruffled margin: push opposite sides by an undulation
+  // Ruffled margin: push opposite sides by an undulation, fading to nothing at base and tip
   float undulA = i_curveUndul.y;
-  float undul  = undulA * sin(t * u_undulFreq + yaw*0.7);
+  float undul  = undulA * sin(t * u_undulFreq + yaw*0.7) * mid;
   float side   = sign(a_pos.x);                     // -1 or +1
 
   // Arch the blade (gentle boat shape)
@@ -80,10 +83,11 @@ void main() {
   vec3 base = vec3(i_baseXZ.x, 0.0, i_baseXZ.y);
   vec3 P    = base
             + tangent * (t * L)
-            + normal  * (a_pos.x * width + side * undul)    // ribbon width + rippled edge
-            + binorm  * arch                                 // slight "boat" cross-arch
+            + binorm  * (a_pos.x * width + side * undul)    // ribbon width + rippled edge
+            + normal  * arch                                 // slight "boat" cross-arch
             + lateral * (sway + wobble)                      // water sway
             + (u_currentDir.xxy).xzy * (0.02 * tipW * sin(t*2.2 + seed + u_time)); // tiny downstream drift
+  P.y = onSand(i_baseXZ, P.y);
 
   // Fake a bit of cross-section curvature in the normal so lighting varies across width
   float w = a_pos.x * 2.0; // -1..1
@@ -94,6 +98,7 @@ void main() {
   v_posVS   = V.xyz;
   v_camDist = length(V.xyz);
   v_normalVS = mat3(u_view) * bentNormal;  // normal in view space
+  v_lightVS  = mat3(u_view) * normalize(vec3(-0.3, 0.8, 0.25)); // light from above/side, fixed in the world
   gl_Position = u_proj * V;
 
   // ----- Base leaf color (no veins/lighting yet) -----
@@ -114,6 +119,7 @@ precision highp float;
 
 in vec3  v_baseColor;
 in vec3  v_normalVS;
+in vec3  v_lightVS;
 in vec3  v_posVS;
 in vec2  v_leafCoord;   // (s along, w across)
 in float v_seed;
@@ -157,10 +163,12 @@ void main(){
 
   // --- Lighting: directional + rim for dimension (toned down) ---
   vec3 N = normalize(v_normalVS);
-  vec3 L = normalize(vec3(-0.3, 0.8, 0.25)); // light from above/side
-  float diff = max(0.0, dot(N, L));
-
+  vec3 L = normalize(v_lightVS);
   vec3 V = normalize(-v_posVS);              // view direction in view space
+
+  // leaves are two sided, so light the side facing the camera
+  if (dot(N, V) < 0.0) N = -N;
+  float diff = max(0.0, dot(N, L));
   float rim = pow(1.0 - max(dot(N, V), 0.0), 2.0);
 
   float light = 0.35 + diff * 0.6 + rim * 0.35;

@@ -1,4 +1,5 @@
 // plants/stagHornShaders.js
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
 
 export const vs = `#version 300 es
 precision highp float;
@@ -15,6 +16,7 @@ in float i_phase;
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
+${sandHeightGLSL}
 uniform float u_time;
 
 out vec3 v_normal;
@@ -66,6 +68,7 @@ void main(){
   vec3 sway = swayDir * (0.04 * swayFactor);
 
   vec3 world = core + radDir * r + sway;
+  world.y = onSand(i_base.xz, world.y);
 
   v_world  = world;
 
@@ -98,6 +101,7 @@ uniform vec3 u_fogColor;
 uniform float u_fogNear;
 uniform float u_fogFar;
 uniform float u_time;
+uniform vec3 u_camPos;
 
 vec3 h2rgb(float h){
   float r = abs(h*6.0 - 3.0) - 1.0;
@@ -114,7 +118,7 @@ void main(){
   vec3 N = normalize(v_normal);
 
   vec3 L = normalize(vec3(-0.3, 1.0, 0.2));
-  vec3 V = normalize(-v_world);
+  vec3 V = normalize(u_camPos - v_world);
 
   float diff    = max(dot(N, L), 0.0);
   float ndotV   = max(dot(N, V), 0.0);

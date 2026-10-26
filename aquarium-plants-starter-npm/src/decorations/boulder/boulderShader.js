@@ -1,3 +1,5 @@
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
+
 export const vs = `#version 300 es
 precision highp float;
 
@@ -11,6 +13,7 @@ in float i_hue;
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
+${sandHeightGLSL}
 uniform float u_time;
 
 out vec3 v_normal;
@@ -65,6 +68,7 @@ void main(){
   vec3 displaced = worldPos + a_normal * disp;
 
   vec3 pos = displaced * i_scale + i_offset;
+  pos.y += sandOffset(i_offset.xz);
 
   v_world  = pos;
   // approximate normal from displaced position so bumps catch light

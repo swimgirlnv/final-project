@@ -1,6 +1,7 @@
 import { vs, fs } from "./grassShaders.js";
 import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 const TANK = { xHalf: TANK_X_HALF, zHalf: TANK_Z_HALF }; // world half-extents in X/Z
 
@@ -157,6 +158,7 @@ export function createGrassLayer(gl) {
   gl.bindVertexArray(ribbon.vao);
   const inst = mkInstBufs(ribbon.attribs, 20000);
 
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj = U("u_proj"),
     u_view = U("u_view"),
@@ -169,6 +171,9 @@ export function createGrassLayer(gl) {
   const u_fogNear = U("u_fogNear");
   const u_fogFar = U("u_fogFar");
   
+  const u_glow = U("u_glow");
+  const u_glowHue = U("u_glowHue");
+
   // Disco lights
   const u_numDiscoLights = U("u_numDiscoLights");
   const u_discoLightPos = [];
@@ -222,6 +227,7 @@ export function createGrassLayer(gl) {
     const BLADES_PER_TUFT = 5;
     const TUFT_RADIUS = 0.04;      // how wide each tuft can spread
     const grassRadius = 0.015;     // used for collision radius at tuft center
+    const BLADE_REACH = 0.06;      // blade width plus wobble and drift past the tuft edge
 
     // interpret state.count as approx number of blades
     const targetBlades = state.count | 0;
@@ -243,8 +249,8 @@ export function createGrassLayer(gl) {
       const x = (Math.random() * 2 - 1) * TANK_X_HALF;
       const z = (Math.random() * 2 - 1) * TANK_Z_HALF;
 
-      // let plants get close to walls, but still inside tank
-      if (!isInsideTank(x, z, 0.001)) continue;
+      // let plants get close to walls, but keep every blade inside the tank
+      if (!isInsideTank(x, z, TUFT_RADIUS + BLADE_REACH)) continue;
 
       // avoid big objects / holes using a slightly bigger radius for the tuft
       if (checkCollision2D(x, z, grassRadius * 2.5, 0.0)) continue;
@@ -318,6 +324,7 @@ export function createGrassLayer(gl) {
     draw(shared) {
       if (inst.count === 0) return;
       gl.useProgram(prog);
+      setSandUniforms(shared);
       gl.bindVertexArray(ribbon.vao);
       gl.uniformMatrix4fv(u_proj, false, shared.proj);
       gl.uniformMatrix4fv(u_view, false, shared.view);
@@ -333,6 +340,8 @@ export function createGrassLayer(gl) {
       );
       gl.uniform1f(u_fogNear, shared.fogNear);
       gl.uniform1f(u_fogFar, shared.fogFar);
+      gl.uniform1f(u_glow, shared.discoGlow ?? 0.0);
+      gl.uniform1f(u_glowHue, shared.discoGlowHue ?? 0.0);
       
       // Set disco lights
       const discoLights = shared.discoLights || [];

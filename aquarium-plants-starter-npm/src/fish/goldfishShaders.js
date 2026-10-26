@@ -13,6 +13,7 @@ layout(location=5) in float i_rotY;
 layout(location=6) in float i_size;     
 layout(location=7) in float i_speed;    
 layout(location=8) in float i_colorVar;
+layout(location=9) in float i_pitch;    // nose up or down, used for leaps
 
 // Uniforms
 uniform mat4 u_proj;
@@ -52,6 +53,16 @@ vec3 h2rgb(float h){
   float g = 2.0 - abs(h*6.0 - 2.0);
   float b = 2.0 - abs(h*6.0 - 4.0);
   return clamp(vec3(r,g,b),0.0,1.0) * 0.9;
+}
+
+mat3 makeRotX(float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return mat3(
+        1.0, 0.0, 0.0,
+        0.0, c, s,
+        0.0, -s, c
+    );
 }
 
 mat3 eulerRotate(vec3 angles) {
@@ -134,7 +145,7 @@ void main() {
       animatePos.z
   );
 
-  vec3 instancePos = wavePos * i_size;
+  vec3 instancePos = makeRotX(i_pitch) * wavePos * i_size;
   // flipped :(
   instancePos = makeRotY(i_rotY + 3.1459) * instancePos;
   instancePos += i_pos;
@@ -165,6 +176,12 @@ uniform float u_time;
 uniform vec3  u_fogColor;
 uniform float u_fogNear;
 uniform float u_fogFar;
+
+uniform float u_saturation; // 0 grey, 1 original, above 1 more vivid
+uniform float u_value;      // overall brightness of the palette
+uniform float u_noise;      // 0 plain scales, 1 full fbm mottling on the body
+uniform float u_secondaryHue; // extra palette shift for the head and fins, 0 keeps them matching the body
+uniform float u_glow;       // 0 normal, 1 full disco glow
 
 float random (in vec3 _st) {
     return fract(sin(dot(_st.xyz,
@@ -280,7 +297,7 @@ void main() {
   {
     vec3 scaledPos = vec3(v_pos.x + 1.2, v_pos.y + 1.3, v_pos.z * 2.0);
     float fishScale = fish_scale(scaledPos * 10.0);
-    float noisy = fbm(v_pos * 10.0);
+    float noisy = fbm(v_pos * 10.0) * u_noise;
     
     vec3 localDir = normalize(v_pos - v_pivot);
     vec3 lookDir = vec3(0.0, 1.0, 0.0);
@@ -377,10 +394,16 @@ void main() {
   }
 
   if (v_label != 3) {
+    // the head and fins can be shifted along the palette apart from the body
+    float secondaryShift = 0.0;
+    if (v_label == 2 || v_label == 1 || v_label == 5 || v_label == 6 || v_label == 7) {
+      secondaryShift = u_secondaryHue;
+    }
+
     // apply color palette  
     outColor = vec4(
       palette(
-        outColor.r + v_colorVar * 0.2, 
+        outColor.r + v_colorVar * 0.2 + secondaryShift, 
         vec3(0.5), 
         vec3(0.5), 
         vec3(1.0, 1.0, 1.0), 
@@ -388,6 +411,14 @@ void main() {
       ), 
       1.0
     );
+
+    // saturation and value from the colour sliders
+    float lum = dot(outColor.rgb, vec3(0.299, 0.587, 0.114));
+    vec3 adjusted = mix(vec3(lum), outColor.rgb, u_saturation) * u_value;
+    outColor = vec4(clamp(adjusted, 0.0, 1.0), 1.0);
   }
+
+  // disco glow brightens the whole fish with a gentle pulse
+  outColor.rgb *= 1.0 + u_glow * (0.45 + 0.2 * sin(u_time * 5.0 + v_colorVar * 6.0));
 }
 `;

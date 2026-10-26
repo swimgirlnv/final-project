@@ -28,6 +28,14 @@ function lerp(start, end, amt) {
     return (1 - amt) * start + amt * end;
 }
 
+// Y rotation the fish model needs to face along a horizontal heading
+function headingToRot(hx, hz) {
+    let forwardVal = hz; // rotation from forward vector
+    forwardVal = (forwardVal + 1.0) / 2.0;
+    forwardVal *= Math.PI * (hx < 0.0 ? -1.0 : 1.0); // whether or not we flip x axis
+    return forwardVal + Math.PI;
+}
+
 function lerpAngle(start, end, amt) {
     let diff = end - start;
     while (diff < -Math.PI) diff += Math.PI * 2;
@@ -118,11 +126,15 @@ class Boid {
         // no other rotation
         this.yRot = 0.0;
 
+        // nose up or down during a leap, and the active disco stunt if any
+        this.pitch = 0.0;
+        this.stunt = null;
+
         this.wanderTheta = Math.random() * Math.PI * 2;
     }
 
     // Update signature to accept bounds
-    update(bounds, timeScale) { 
+    update(bounds, timeScale, ceiling = Infinity) { 
         this.velocity.add(this.acceleration.mult(timeScale));
         this.velocity.limit(this.maxSpeed);
 
@@ -135,6 +147,12 @@ class Boid {
         let upperBounds = new Vec3(bounds.maxX, bounds.maxY, bounds.maxZ);
         this.position.vClamp(lowerBounds, upperBounds);
 
+        // stay under the water surface
+        if (this.position.y > ceiling) {
+            this.position.y = ceiling;
+            if (this.velocity.y > 0.0) this.velocity.y = 0.0;
+        }
+
         this.acceleration.mult(0);
     }
 
@@ -144,12 +162,7 @@ class Boid {
         {
             horizontalMovement.normalize(); // generally a good idea
 
-            let forwardVal = Vec3.dot(horizontalMovement, new Vec3(0.0, 0.0, 1.0)); // rotation from forward vector
-            let forwardVal2 = Vec3.dot(horizontalMovement, new Vec3(1.0, 0.0, 0.0)); // whether or not we flip x axis
-            forwardVal = (forwardVal + 1.0) / 2.0;
-
-            forwardVal *= Math.PI * (forwardVal2 < 0.0 ? -1.0 : 1.0);
-            let newRot = forwardVal + Math.PI;
+            let newRot = headingToRot(horizontalMovement.x, horizontalMovement.z);
             this.yRot = lerpAngle(this.yRot, newRot, 0.1); // atan2 method didn't work, so I had to do this hacky custom thing
         }
     }
@@ -242,16 +255,20 @@ class Boid {
     // draws fish back into tank when outside
     calculateBoundsForce(bounds, strength) {
         let desired = null;
+        // turn back 0.5 from each wall, or sooner in a narrow tank so the two walls never overlap
         const margin = 0.5;
+        const mx = Math.min(margin, (bounds.maxX - bounds.minX) * 0.3);
+        const my = Math.min(margin, (bounds.maxY - bounds.minY) * 0.3);
+        const mz = Math.min(margin, (bounds.maxZ - bounds.minZ) * 0.3);
 
-        if (this.position.x < bounds.minX + margin) desired = new Vec3(this.maxSpeed, this.velocity.y, this.velocity.z);
-        else if (this.position.x > bounds.maxX - margin) desired = new Vec3(-this.maxSpeed, this.velocity.y, this.velocity.z);
+        if (this.position.x < bounds.minX + mx) desired = new Vec3(this.maxSpeed, this.velocity.y, this.velocity.z);
+        else if (this.position.x > bounds.maxX - mx) desired = new Vec3(-this.maxSpeed, this.velocity.y, this.velocity.z);
 
-        if (this.position.y < bounds.minY + margin) desired = new Vec3(this.velocity.x, this.maxSpeed, this.velocity.z);
-        else if (this.position.y > bounds.maxY - margin) desired = new Vec3(this.velocity.x, -this.maxSpeed, this.velocity.z);
+        if (this.position.y < bounds.minY + my) desired = new Vec3(this.velocity.x, this.maxSpeed, this.velocity.z);
+        else if (this.position.y > bounds.maxY - my) desired = new Vec3(this.velocity.x, -this.maxSpeed, this.velocity.z);
 
-        if (this.position.z < bounds.minZ + margin) desired = new Vec3(this.velocity.x, this.velocity.y, this.maxSpeed);
-        else if (this.position.z > bounds.maxZ - margin) desired = new Vec3(this.velocity.x, this.velocity.y, -this.maxSpeed);
+        if (this.position.z < bounds.minZ + mz) desired = new Vec3(this.velocity.x, this.velocity.y, this.maxSpeed);
+        else if (this.position.z > bounds.maxZ - mz) desired = new Vec3(this.velocity.x, this.velocity.y, -this.maxSpeed);
 
         if (desired) {
             desired.normalize().mult(this.maxSpeed);
@@ -281,18 +298,29 @@ export class BoidSystem {
 
         this.config = behaviors;
         this.bounds = bounds;
-        this.initBoids(count);
         this.maxSpeed = movement.maxSpeed;
         this.maxForce = movement.maxForce;
 
-        this.food = null;
-        this.foodCount = 0;
+        // water surface height, fish swim no higher than this minus surfacePad
+        this.waterY = 1.8;
+        this.surfacePad = 0.12;
+        this.initBoids(count);
+
+        // each piece: { pos: Vec3, eatTimer: seconds left once touched, or null }
+        this.foods = [];
+        this.foodEatTime = 0.5;
+
+        // disco stunts: fast circles and rare leaps out of the water
+        this.stuntsEnabled = false;
+        this.leapAllowed = false;
+        this.splashes = []; // surface points crossed by leaping fish, read and cleared by main
     }
 
     initBoids(count) {
         for (let i = 0; i < count; i++) {
             const x = Math.random() * (this.bounds.maxX - this.bounds.minX) + this.bounds.minX;
-            const y = Math.random() * (this.bounds.maxY - this.bounds.minY) + this.bounds.minY;
+            const yMax = Math.min(this.bounds.maxY, this.waterY - this.surfacePad);
+            const y = Math.random() * (yMax - this.bounds.minY) + this.bounds.minY;
             const z = Math.random() * (this.bounds.maxZ - this.bounds.minZ) + this.bounds.minZ;
             this.boids.push(new Boid(x * 0.9, y * 0.9, z * 0.9, this.maxSpeed, this.maxForce));
         }
@@ -309,33 +337,155 @@ export class BoidSystem {
     }
 
     dropFood() {
-        this.food = new Vec3(
-            (Math.random() * 2 - 1) * 0.5, // Random X near center
-            1.8,                           // Top of tank
-            (Math.random() * 2 - 1) * 0.5  // Random Z near center
-        );
-        this.foodCount = 900;
+        // anywhere across the tank, kept a little away from the glass
+        const pad = 0.2;
+        const b = this.bounds;
+        const x = lerp(b.minX + pad, b.maxX - pad, Math.random());
+        const z = lerp(b.minZ + pad, b.maxZ - pad, Math.random());
+        this.foods.push({
+            pos: new Vec3(x, this.waterY, z), // Top of tank
+            eatTimer: null,
+        });
     }
-    decrementFood() {
-        this.foodCount--;
-        if (this.foodCount < 0) {
-            this.food = null;
+
+    nearestFood(position) {
+        let nearest = null;
+        let best = Infinity;
+        for (let food of this.foods) {
+            const d = position.dist(food.pos);
+            if (d < best) {
+                best = d;
+                nearest = food;
+            }
         }
+        return nearest;
     }
 
     setBehaviors(newConfig) { this.config = { ...this.config, ...newConfig }; }
     setBounds(newBounds) { this.bounds = { ...this.bounds, ...newBounds }; }
 
+    // Swim in a tight fast circle for two seconds
+    startSpin(boid) {
+        const v = boid.velocity;
+        let hx = v.x, hz = v.z;
+        const len = Math.hypot(hx, hz) || 1.0;
+        hx /= len; hz /= len;
+
+        const turn = Math.random() < 0.5 ? -1 : 1;
+        const radius = 0.2;
+        const b = this.bounds;
+        const pad = radius + 0.05;
+        const cx = numClamp(boid.position.x - hz * turn * radius, b.minX + pad, b.maxX - pad);
+        const cz = numClamp(boid.position.z + hx * turn * radius, b.minZ + pad, b.maxZ - pad);
+
+        boid.stunt = {
+            type: "spin",
+            time: 0.0,
+            duration: 2.0,
+            cx, cz, radius, turn,
+            angle: Math.atan2(boid.position.z - cz, boid.position.x - cx),
+            omega: 2.5 * Math.PI, // two and a half loops over the two seconds
+        };
+    }
+
+    // Arc up through the surface and dive back in a little further ahead
+    startLeap(boid) {
+        const v = boid.velocity;
+        let hx = v.x, hz = v.z;
+        const len = Math.hypot(hx, hz) || 1.0;
+        hx /= len; hz /= len;
+
+        const b = this.bounds;
+        const pad = 0.3;
+        const reach = 1.1;
+        const x1 = numClamp(boid.position.x + hx * reach, b.minX + pad, b.maxX - pad);
+        const z1 = numClamp(boid.position.z + hz * reach, b.minZ + pad, b.maxZ - pad);
+        if (Math.hypot(x1 - boid.position.x, z1 - boid.position.z) < 0.6) return false;
+
+        boid.stunt = {
+            type: "leap",
+            time: 0.0,
+            duration: 1.3,
+            x0: boid.position.x, y0: boid.position.y, z0: boid.position.z,
+            x1, y1: this.waterY - 0.35, z1,
+            apex: this.waterY + 0.45,
+            above: false,
+        };
+        boid.yRot = headingToRot(x1 - boid.position.x, z1 - boid.position.z);
+        return true;
+    }
+
+    startStunts(dt) {
+        const free = this.boids.filter(b => !b.stunt);
+
+        // each fish starts a circle about once every 40 seconds
+        for (let boid of free) {
+            if (Math.random() < dt / 40.0) this.startSpin(boid);
+        }
+
+        // a leap about once every 25 seconds, from a fish near the surface
+        if (this.leapAllowed && Math.random() < dt / 25.0) {
+            const near = free.filter(b => !b.stunt && b.position.y > this.waterY - 0.9);
+            if (near.length > 0) this.startLeap(near[Math.floor(Math.random() * near.length)]);
+        }
+    }
+
+    updateStunt(boid, dt) {
+        const s = boid.stunt;
+        s.time += dt;
+
+        if (s.type === "spin") {
+            // ease in and out of the circle
+            const ramp = Math.max(0.3, Math.min(1.0, s.time / 0.25, (s.duration - s.time) / 0.25));
+            s.angle += s.turn * s.omega * ramp * dt;
+
+            const ca = Math.cos(s.angle), sa = Math.sin(s.angle);
+            boid.position.x = s.cx + ca * s.radius;
+            boid.position.z = s.cz + sa * s.radius;
+
+            // tangent of the circle in the turning direction
+            const tx = -sa * s.turn, tz = ca * s.turn;
+            boid.velocity = new Vec3(tx, 0.0, tz).mult(boid.maxSpeed);
+            boid.yRot = headingToRot(tx, tz);
+        } else {
+            const u = Math.min(1.0, s.time / s.duration);
+            const lift = s.apex - (s.y0 + s.y1) * 0.5;
+            boid.position.x = lerp(s.x0, s.x1, u);
+            boid.position.z = lerp(s.z0, s.z1, u);
+            boid.position.y = lerp(s.y0, s.y1, u) + 4.0 * lift * u * (1.0 - u);
+
+            // tilt the nose along the arc
+            const dy = (s.y1 - s.y0) + 4.0 * lift * (1.0 - 2.0 * u);
+            const dh = Math.hypot(s.x1 - s.x0, s.z1 - s.z0);
+            boid.pitch = Math.atan2(dy, dh);
+
+            // record each crossing of the water surface
+            const above = boid.position.y > this.waterY;
+            if (above !== s.above) {
+                this.splashes.push({ x: boid.position.x, y: this.waterY, z: boid.position.z });
+                s.above = above;
+            }
+
+            boid.velocity = new Vec3(s.x1 - s.x0, 0.0, s.z1 - s.z0).setMag(boid.maxSpeed);
+        }
+
+        if (s.time >= s.duration) {
+            boid.stunt = null;
+            boid.pitch = 0.0;
+        }
+    }
+
     update(dt) {
         let timeScale = dt * 120.0;
 
-        if (this.food) {
-            this.food.y -= 0.0005 * timeScale; // Sink speed
-            
-            if (this.food.y < 0.0) {
-                this.food = null;
-            }
+        if (this.stuntsEnabled) this.startStunts(dt);
+
+        // sink food, count down pieces being eaten, and drop finished ones
+        for (let food of this.foods) {
+            food.pos.y -= 0.0005 * timeScale; // Sink speed
+            if (food.eatTimer !== null) food.eatTimer -= dt;
         }
+        this.foods = this.foods.filter(f => f.pos.y >= 0.0 && (f.eatTimer === null || f.eatTimer > 0.0));
 
         // update spatial grid only if we are hashing
         if (this.useHash)
@@ -345,8 +495,14 @@ export class BoidSystem {
         }
         
         for (let boid of this.boids) {
-            if (this.food && boid.position.dist(this.food) < 0.1) {
-                this.decrementFood();
+            if (boid.stunt) {
+                this.updateStunt(boid, dt);
+                continue;
+            }
+
+            const food = this.nearestFood(boid.position);
+            if (food && food.eatTimer === null && boid.position.dist(food.pos) < 0.1) {
+                food.eatTimer = this.foodEatTime;
             }
 
             // either use spatial hash neighbors or
@@ -355,13 +511,15 @@ export class BoidSystem {
             if (this.useHash) others = this.grid.getNearby(boid);
             else others = this.boids;
 
-            boid.flock(this.boids, this.config, this.bounds, this.food);
+            boid.flock(this.boids, this.config, this.bounds, food ? food.pos : null);
             boid.updateRotation();
-            boid.update(this.bounds, timeScale);
+            boid.update(this.bounds, timeScale, this.waterY - this.surfacePad);
         }
     }
 
     setBoidMaxSpeed(speed) {
+        // remembered so fish created later use the same speed
+        this.maxSpeed = speed;
         for (let boid of this.boids) {
             boid.maxSpeed = speed;
         }
@@ -378,7 +536,8 @@ export class BoidSystem {
             vy: b.velocity.y,
             vz: b.velocity.z,
             // y rotation
-            rotY: b.yRot
+            rotY: b.yRot,
+            pitch: b.pitch
         }));
     }
 }

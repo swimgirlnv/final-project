@@ -1,4 +1,10 @@
-// discoLights.js - Dancing colored lights for disco mode
+// Dancing colored lights for disco mode
+
+// Hue cycles per second for the point lights and spotlights
+export const DISCO_HUE_RATE = 0.06;
+// Faster hue cycling for the glowing fish and grass
+export const DISCO_GLOW_HUE_RATE = 0.1;
+const SPOT_HUE_RATE = 0.048;
 
 export function createDiscoLights() {
   const lights = [];
@@ -33,15 +39,21 @@ export function createDiscoLights() {
       hue: Math.random(),
       speed: 0.2 + Math.random() * 0.3,
       phase: Math.random() * Math.PI * 2,
-      sweepRadius: 1.5 + Math.random() * 1.0,
+      sweepRadius: 0.35 + Math.random() * 0.5, // fraction of the tank half size
       intensity: 0.8 + Math.random() * 0.4,
-      coneAngle: 0.3 + Math.random() * 0.2, // in radians
+      coneAngle: 0.12 + Math.random() * 0.08, // in radians
     });
   }
+
+  // Where the beams come from and the area they sweep over
+  const rig = { origin: [0, 3.5, 0], halfX: 2.6, halfZ: 2.2, floorY: -0.5 };
   
   let enabled = false;
+  let lastTime = null;
   
   function update(time) {
+    const dt = lastTime === null ? 0 : Math.max(0, time - lastTime);
+    lastTime = time;
     if (!enabled) return;
     
     lights.forEach((light, i) => {
@@ -55,17 +67,21 @@ export function createDiscoLights() {
       light.y = 1.5 + Math.sin(t * 1.3) * 0.8;
       
       // Slowly shift hue
-      light.hue = (light.hue + 0.001) % 1.0;
+      light.hue = (light.hue + DISCO_HUE_RATE * dt) % 1.0;
     });
     
     // Update spotlights
     spotlights.forEach((spot, i) => {
       const t = time * spot.speed + spot.phase;
       
-      // Sweep in circular patterns
-      const targetX = Math.cos(t) * spot.sweepRadius;
-      const targetZ = Math.sin(t) * spot.sweepRadius;
-      const targetY = -0.5; // Point towards the floor
+      spot.x = rig.origin[0];
+      spot.y = rig.origin[1];
+      spot.z = rig.origin[2];
+
+      // Sweep in circular patterns across the tank floor
+      const targetX = Math.cos(t) * spot.sweepRadius * rig.halfX;
+      const targetZ = Math.sin(t) * spot.sweepRadius * rig.halfZ;
+      const targetY = rig.floorY; // Point towards the floor
       
       // Calculate direction vector
       const dx = targetX - spot.x;
@@ -78,7 +94,7 @@ export function createDiscoLights() {
       spot.dirZ = dz / len;
       
       // Shift hue
-      spot.hue = (spot.hue + 0.0008) % 1.0;
+      spot.hue = (spot.hue + SPOT_HUE_RATE * dt) % 1.0;
     });
   }
   
@@ -116,6 +132,13 @@ export function createDiscoLights() {
     });
   }
   
+  function setRig(origin, halfX, halfZ, floorY) {
+    rig.origin = origin;
+    rig.halfX = halfX;
+    rig.halfZ = halfZ;
+    rig.floorY = floorY;
+  }
+
   function setEnabled(value) {
     enabled = !!value;
   }
@@ -130,6 +153,7 @@ export function createDiscoLights() {
     getSpotlights,
     setEnabled,
     isEnabled,
+    setRig,
   };
 }
 

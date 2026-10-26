@@ -1,6 +1,7 @@
 import { vs, fs } from "./fanShaders.js";
 import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 export function createFanCoralLayer(gl) {
   function compile(type, src) {
@@ -35,10 +36,13 @@ export function createFanCoralLayer(gl) {
   // L-system → segments → quads
   // ---------------------------------------------------------------------------
 
-  const FANS = 6;           // how many separate fans
+  const state = {
+    count: +document.getElementById("fanCount")?.value || 6, // how many separate fans
+  };
   const ITER = 4;           // L-system iterations
-  const BASE_SEG_LEN = 0.055;
-  const FAN_HEIGHT = 0.42;  // used to normalize "height" attribute
+  const BASE_SEG_LEN = 0.075;
+  const FAN_HEIGHT = 0.55;  // used to normalize "height" attribute
+  const SWAY_PAD = 0.05;    // extra room for the tip sway in the vertex shader
 
   function rand(a, b) {
     return a + Math.random() * (b - a);
@@ -82,7 +86,7 @@ export function createFanCoralLayer(gl) {
     const nx = -dy / len;
     const ny = dx / len;
 
-    const width = 0.026 * Math.pow(0.72, depth);
+    const width = 0.04 * Math.pow(0.72, depth);
     const hw = width * 0.5;
 
     const px = nx * hw;
@@ -165,57 +169,75 @@ export function createFanCoralLayer(gl) {
     }
   }
 
+  function emptyMesh() {
+    return { pos: [], norm: [], height: [], hue: [], base: [], idx: [] };
+  }
+
+  // Warm reds, oranges and purples that stand out against the sand
+  function pickHue() {
+    const r = Math.random();
+    if (r < 0.4) return rand(0.95, 1.03);
+    if (r < 0.75) return rand(0.03, 0.08);
+    return rand(0.78, 0.86);
+  }
+
+  // Copy a fan built at the origin into the scene, turned by yaw around its base
+  function appendFan(mesh, local, baseX, baseY, baseZ, yaw) {
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    const offset = mesh.pos.length / 3;
+    for (let i = 0; i < local.pos.length; i += 3) {
+      const x = local.pos[i];
+      mesh.pos.push(baseX + x * c, baseY + local.pos[i + 1], baseZ + x * s);
+      mesh.norm.push(-s, 0, c);
+      mesh.base.push(baseX, baseZ);
+    }
+    mesh.height.push(...local.height);
+    mesh.hue.push(...local.hue);
+    for (const i of local.idx) mesh.idx.push(offset + i);
+  }
+
   function buildMesh() {
     // Clear only fan coral objects from collision registry
     clearObjectsByType("fanCoral");
     
-    const mesh = {
-      pos: [],
-      norm: [],
-      height: [],
-      hue: [],
-      idx: [],
-    };
+    const mesh = emptyMesh();
+    const fanRadius = 0.22; // footprint used against other objects
 
-    const xHalf = TANK_X_HALF * 0.9;
-    const zHalf = TANK_Z_HALF * 0.9;
-    const fanRadius = 0.22;
+    for (let f = 0; f < state.count; f++) {
+      const local = emptyMesh();
+      addFan(local, 0, 0, 0, pickHue());
 
-    let placed = 0;
-    let attempts = 0;
-    const MAX_ATTEMPTS = FANS * 40;
+      // widest reach from the base, which is the footprint at any yaw
+      let extent = 0;
+      for (let i = 0; i < local.pos.length; i += 3) {
+        extent = Math.max(extent, Math.abs(local.pos[i]));
+      }
+      extent += SWAY_PAD;
 
-    while (placed < FANS && attempts < MAX_ATTEMPTS) {
-      attempts++;
-      
-      const baseX = rand(-xHalf, xHalf);
-      const baseZ = rand(-zHalf, zHalf);
-      
-      if (!isInsideTank(baseX, baseZ, fanRadius)) continue;
-      if (checkCollision2D(baseX, baseZ, fanRadius, 0.0)) continue;
-      registerObject(baseX, baseZ, fanRadius, "fanCoral");
-      
-      const baseY = -0.02; // just above sand
-      const hue = rand(0.04, 0.09); // warm orange range
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const baseX = rand(-TANK_X_HALF, TANK_X_HALF);
+        const baseZ = rand(-TANK_Z_HALF, TANK_Z_HALF);
 
-      addFan(mesh, baseX, baseY, baseZ, hue);
-      placed++;
+        if (!isInsideTank(baseX, baseZ, extent)) continue;
+        if (checkCollision2D(baseX, baseZ, fanRadius, 0.0)) continue;
+        registerObject(baseX, baseZ, fanRadius, "fanCoral");
+
+        const baseY = -0.02; // just above sand
+        appendFan(mesh, local, baseX, baseY, baseZ, rand(0, Math.PI * 2));
+        break;
+      }
     }
 
     return mesh;
   }
 
   let mesh = buildMesh();
-  
-  // Ensure mesh always has the required structure
-  if (!mesh) {
-    mesh = { pos: [], norm: [], height: [], hue: [], idx: [] };
-  }
 
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
 
-  let posBuffer, normBuffer, heightBuffer, hueBuffer, indexBuffer;
+  let posBuffer, normBuffer, heightBuffer, hueBuffer, baseBuffer, indexBuffer;
 
   function rebuildBuffers() {
     function vbuf(data, loc, size, buffer) {
@@ -231,6 +253,7 @@ export function createFanCoralLayer(gl) {
     normBuffer = vbuf(mesh.norm, 1, 3, normBuffer);
     heightBuffer = vbuf(mesh.height, 2, 1, heightBuffer);
     hueBuffer = vbuf(mesh.hue, 3, 1, hueBuffer);
+    baseBuffer = vbuf(mesh.base, 4, 2, baseBuffer);
 
     if (!indexBuffer) indexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -248,8 +271,10 @@ export function createFanCoralLayer(gl) {
     a_normal: 1,
     a_height: 2,
     a_hue:    3,
+    a_base:   4,
   });
 
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj     = U("u_proj");
   const u_view     = U("u_view");
@@ -260,20 +285,25 @@ export function createFanCoralLayer(gl) {
 
   return {
     setFanCount(n) {
+      state.count = Math.max(0, n | 0);
     },
     
     regenerate() {
       mesh = buildMesh();
-      if (mesh && mesh.idx && mesh.idx.length > 0) {
-        gl.bindVertexArray(vao);
-        rebuildBuffers();
-      }
+      gl.bindVertexArray(vao);
+      rebuildBuffers();
     },
 
     draw(shared) {
       if (!mesh || !mesh.idx || !mesh.idx.length) return;
 
       gl.useProgram(prog);
+      // tallest point of the fans, measured once per mesh
+      if (mesh.top === undefined) {
+        mesh.top = 0;
+        for (let i = 1; i < mesh.pos.length; i += 3) mesh.top = Math.max(mesh.top, mesh.pos[i]);
+      }
+      setSandUniforms(shared, mesh.top);
       gl.bindVertexArray(vao);
 
       // make fan visible from both sides

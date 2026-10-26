@@ -55,38 +55,58 @@ function mkInstanceBuffers(gl, bindings, maxInstances) {
   }
 
   // Define buffers based on requested instance attributes
-  // i_pos(3), i_rotY(1), i_size(1), i_speed(1), i_colorVar(1)
+  // i_pos(3), i_rotY(1), i_size(1), i_speed(1), i_colorVar(1), i_pitch(1)
   const bufs = {
     pos: mk(bindings.i_pos, 3),
     rotY: mk(bindings.i_rotY, 1),
     size: mk(bindings.i_size, 1),
     speed: mk(bindings.i_speed, 1),
     colorVar: mk(bindings.i_colorVar, 1),
+    pitch: mk(bindings.i_pitch, 1),
     count: 0,
   };
+
+  // Reused upload arrays so no new memory is allocated every frame
+  const scratch = {
+    pos: new Float32Array(maxInstances * 3),
+    rotY: new Float32Array(maxInstances),
+    size: new Float32Array(maxInstances),
+    speed: new Float32Array(maxInstances),
+    colorVar: new Float32Array(maxInstances),
+    pitch: new Float32Array(maxInstances),
+  };
+
+  function upload(buffer, name, data, comps) {
+    const n = Math.min(data.length, maxInstances * comps);
+    const arr = scratch[name];
+    for (let i = 0; i < n; i++) arr[i] = data[i];
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, arr, 0, n);
+  }
 
   return {
     ...bufs,
     // Data expected to be an object with arrays: { pos:[], rotY:[], size:[], speed:[], colorVar:[], count: N }
     update(data) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.pos);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.pos));
+      upload(bufs.pos, "pos", data.pos, 3);
+      upload(bufs.rotY, "rotY", data.rotY, 1);
+      upload(bufs.size, "size", data.size, 1);
+      upload(bufs.speed, "speed", data.speed, 1);
+      upload(bufs.colorVar, "colorVar", data.colorVar, 1);
+      if (data.pitch) upload(bufs.pitch, "pitch", data.pitch, 1);
 
-      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.rotY);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.rotY));
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.size);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.size));
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.speed);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.speed));
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, bufs.colorVar);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data.colorVar));
-
-      this.count = data.count;
+      this.count = Math.min(data.count, maxInstances);
     },
   };
+}
+
+// Farthest vertex from the fish origin, so it covers any turn or pitch
+function meshReach(positions) {
+  let r = 0;
+  for (let i = 0; i < positions.length; i += 3) {
+    r = Math.max(r, Math.hypot(positions[i], positions[i + 1], positions[i + 2]));
+  }
+  return r;
 }
 
 // ---------- Geometry: Calls on fcns for head, body, caudal fin, dorsal fin, pectoral fin, pelvic fin, anal fin
@@ -157,6 +177,7 @@ function createFishGeometry(gl, instanceBindings) {
     ibo,
     inst, // Reference to instance buffers manager
     count: indices.length, 
+    reach: meshReach(positions),
     
     // Store params for regeneration
     params: {
@@ -207,6 +228,7 @@ export function regenerateGoldfishGeometry(gl, gfish, newParams) {
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.DYNAMIC_DRAW);
     
     gfish.count = indices.length;
+    gfish.reach = meshReach(positions);
     gfish.params = newParams;
     gl.bindVertexArray(null);
 }
@@ -224,7 +246,8 @@ export function createGoldfish(gl) {
       i_rotY: 5,     // float
       i_size: 6,     // float
       i_speed: 7,    // float
-      i_colorVar: 8  // float (0..1)
+      i_colorVar: 8, // float (0..1)
+      i_pitch: 9     // float (radians)
     };
 
     const prog = makeProgram(gl, vs, fs, bindings);
@@ -241,11 +264,31 @@ export function createGoldfish(gl) {
     const u_fogColor = U("u_fogColor");
     const u_fogNear = U("u_fogNear");
     const u_fogFar = U("u_fogFar");
+    const u_saturation = U("u_saturation");
+    const u_value = U("u_value");
+    const u_noise = U("u_noise");
+    const u_secondaryHue = U("u_secondaryHue");
+    const u_glow = U("u_glow");
+
+    const look = { saturation: 1.0, value: 1.0, noise: 1.0, secondaryHue: 0.0 };
   
     return {
       geometry: gfish,
 
       // data = { pos: [x,y,z...], rotY: [...], size: [...], speed: [...], colorVar: [...], count: N }
+      setSaturation(s) {
+        look.saturation = +s;
+      },
+      setValue(v) {
+        look.value = +v;
+      },
+      setNoise(n) {
+        look.noise = +n;
+      },
+      setSecondaryHue(h) {
+        look.secondaryHue = +h;
+      },
+
       updateInstances(data) {
         // We just delegate to the instance manager created in createFishGeometry
         gfish.inst.update(data);
@@ -273,6 +316,11 @@ export function createGoldfish(gl) {
         );
         gl.uniform1f(u_fogNear, shared.fogNear);
         gl.uniform1f(u_fogFar, shared.fogFar);
+        gl.uniform1f(u_saturation, look.saturation);
+        gl.uniform1f(u_value, look.value);
+        gl.uniform1f(u_noise, look.noise);
+        gl.uniform1f(u_secondaryHue, look.secondaryHue);
+        gl.uniform1f(u_glow, shared.discoGlow ?? 0.0);
 
         // Draw instanced
         // gfish.count = indices count of mesh

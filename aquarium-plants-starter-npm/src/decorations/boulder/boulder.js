@@ -1,5 +1,6 @@
 import { vs, fs } from "./boulderShader.js";
 import { findValidPosition, registerObject, clearObjectsByType } from "../../sceneCollision.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 export function createBoulderLayer(gl) {
   function compile(type, src) {
@@ -120,6 +121,7 @@ export function createBoulderLayer(gl) {
   gl.bindVertexArray(sph.vao);
   const inst = mkInstBufs(128);
 
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj = U("u_proj"),
     u_view = U("u_view"),
@@ -146,7 +148,7 @@ export function createBoulderLayer(gl) {
       const pos = findValidPosition(radius, 100, 0.03);
       if (!pos) continue; // skip if can't find valid position
 
-      const y = rand(-0.08, -0.03);
+      const y = -0.03 + scale * rand(0.1, 0.35); // partly buried, scaled to the rock size
       d.offset.push(pos.x, y, pos.z);
       d.scale.push(scale);
       d.hue.push(rand(0.05, 0.15));
@@ -170,6 +172,7 @@ export function createBoulderLayer(gl) {
       if (cullWasOn) gl.disable(gl.CULL_FACE);
 
       gl.useProgram(prog);
+      setSandUniforms(shared);
       gl.bindVertexArray(sph.vao);
       gl.uniformMatrix4fv(u_proj, false, shared.proj);
       gl.uniformMatrix4fv(u_view, false, shared.view);

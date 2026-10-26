@@ -2,6 +2,7 @@
 import { vs, fs } from "./coralReefShaders.js";
 import { checkCollision2D, isInsideTank, registerObject, clearObjectsByType } from "../../sceneCollision.js";
 import { TANK_X_HALF, TANK_Z_HALF } from "../../tank/tankFloor.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
 
 export function createCoralReefLayer(gl) {
   // ---------- helpers ----------
@@ -155,6 +156,7 @@ export function createCoralReefLayer(gl) {
   gl.bindVertexArray(coralMesh.vao);
   const inst = makeInstBufs(256);
 
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj     = U("u_proj");
   const u_view     = U("u_view");
@@ -234,6 +236,7 @@ export function createCoralReefLayer(gl) {
       if (inst.count === 0) return;
 
       gl.useProgram(prog);
+      setSandUniforms(shared);
       gl.bindVertexArray(coralMesh.vao);
 
       // --- disable back-face culling just for coral reef ---

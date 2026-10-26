@@ -1,88 +1,61 @@
 
+// Roiling surface noise shared by both shaders so the displacement and the shading line up
+const waterNoiseGLSL = `
+const float WATER_FREQ = 3.8;     // noise features per world unit
+const float WATER_AMP  = 0.03;    // vertical displacement at the crests
+
+float w_hash(vec2 p){
+  p = fract(p * vec2(123.34, 345.45));
+  p += dot(p, p + 34.345);
+  return fract(p.x * p.y);
+}
+
+float w_noise(vec2 p){
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  float a = w_hash(i);
+  float b = w_hash(i + vec2(1.0,0.0));
+  float c = w_hash(i + vec2(0.0,1.0));
+  float d = w_hash(i + vec2(1.0,1.0));
+  vec2 u = f*f*(3.0-2.0*f);
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+}
+
+// 0..1 height of the surface at world xz, warped over time so it churns
+float waterNoise(vec2 xz, float t){
+  vec2 p = xz * WATER_FREQ;
+  vec2 warp = vec2(
+    w_noise(p * 0.7 + vec2( 0.30*t, -0.20*t)),
+    w_noise(p * 0.7 + vec2(-0.25*t,  0.35*t) + 5.2)
+  );
+  vec2 r = p + (warp - 0.5) * 1.6;
+  return 0.60 * w_noise(r        + vec2( 0.20*t,  0.10*t))
+       + 0.30 * w_noise(r * 2.1  + vec2(-0.30*t,  0.25*t))
+       + 0.10 * w_noise(r * 4.3  + vec2( 0.50*t, -0.40*t));
+}
+`;
+
 export const vs = `#version 300 es
 precision highp float;
 
-in vec2 a_xz;          // tank-space xz of the surface quad
+in vec2 a_xz;          // tank-space xz of the surface grid
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
 uniform float u_time;
 uniform float u_height;   // base water height (y)
 
-out vec3 v_normal;
-out vec2 v_xz;
+out vec3 v_world;
 out float v_camDist;
 
-// ----- soft Gerstner-style waves -----------------------------------------
-
-// Computes displaced world position for a point p in xz-plane.
-vec3 waterPos(vec2 p, float t){
-  // three gentle waves with different directions / scales
-  vec2 d1 = normalize(vec2( 1.0, 0.2));
-  vec2 d2 = normalize(vec2(-0.6, 1.0));
-  vec2 d3 = normalize(vec2( 0.3,-1.0));
-
-  // ↑ increased amplitudes so waves are more obvious
-  float a1 = 0.035;     // was 0.020
-  float a2 = 0.026;     // was 0.014
-  float a3 = 0.020;     // was 0.010
-
-  float k1 = 1.6;
-  float k2 = 1.1;
-  float k3 = 2.0;
-
-  float s1 = 0.9;
-  float s2 = 0.7;
-  float s3 = 1.2;
-
-  // ↑ slightly stronger horizontal push
-  float steep = 1.0;   // was 0.65
-
-  float w1 = dot(d1, p) * k1 + t * s1;
-  float w2 = dot(d2, p) * k2 + t * s2;
-  float w3 = dot(d3, p) * k3 + t * s3;
-
-  // vertical displacement
-  float dispY =
-      a1 * sin(w1) +
-      a2 * sin(w2) +
-      a3 * sin(w3);
-
-  // horizontal (x/z) drift
-  vec2 dispXZ =
-      d1 * (steep * a1 * cos(w1)) +
-      d2 * (steep * a2 * cos(w2)) +
-      d3 * (steep * a3 * cos(w3));
-
-  vec2 xz = p + dispXZ;
-  float y = u_height + dispY;
-
-  return vec3(xz.x, y, xz.y);
-}
+${waterNoiseGLSL}
 
 void main(){
-  float t = u_time * 0.25;
+  float n = waterNoise(a_xz, u_time);
+  vec3 world = vec3(a_xz.x, u_height + (n - 0.5) * 2.0 * WATER_AMP, a_xz.y);
 
-  vec2 p = a_xz;
-
-  // central position
-  vec3 c  = waterPos(p, t);
-
-  // finite differences for normal using displaced positions
-  float eps = 0.05; // a bit larger since waves are steeper now
-  vec3 px = waterPos(p + vec2(eps, 0.0), t);
-  vec3 mx = waterPos(p - vec2(eps, 0.0), t);
-  vec3 pz = waterPos(p + vec2(0.0, eps), t);
-  vec3 mz = waterPos(p - vec2(0.0, eps), t);
-
-  vec3 dx = px - mx;
-  vec3 dz = pz - mz;
-
-  vec3 n = normalize(cross(dz, dx)); // oriented normal
-
-  vec4 V = u_view * vec4(c, 1.0);
-  v_normal  = n;
-  v_xz      = c.xz;       // use displaced xz so ripples / caustics follow waves
+  vec4 V = u_view * vec4(world, 1.0);
+  v_world   = world;
   v_camDist = length(V.xyz);
 
   gl_Position = u_proj * V;
@@ -92,13 +65,13 @@ void main(){
 export const fs = `#version 300 es
 precision highp float;
 
-in vec3 v_normal;
-in vec2 v_xz;
+in vec3 v_world;
 in float v_camDist;
 
 out vec4 outColor;
 
 uniform float u_time;
+uniform vec3  u_camPos;
 
 // base water colours
 uniform vec3 u_deepColor;    // e.g. vec3(0.02, 0.25, 0.45)
@@ -109,71 +82,43 @@ uniform vec3  u_fogColor;
 uniform float u_fogNear;
 uniform float u_fogFar;
 
-// ---- small helpers -------------------------------------------------
-float hash21(vec2 p){
-  p = fract(p * vec2(123.34, 345.45));
-  p += dot(p, p + 34.345);
-  return fract(p.x * p.y);
-}
+// scene brightness, lowered in disco mode
+uniform float u_bright;
 
-float noise(vec2 p){
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  float a = hash21(i);
-  float b = hash21(i + vec2(1.0,0.0));
-  float c = hash21(i + vec2(0.0,1.0));
-  float d = hash21(i + vec2(1.0,1.0));
-  vec2 u = f*f*(3.0-2.0*f);
-  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
-}
-
-float fbm(vec2 p){
-  float v = 0.0;
-  float a = 0.5;
-  mat2 m = mat2(1.6,1.2,-1.2,1.6);
-  for(int i=0;i<4;i++){
-    v += a * noise(p);
-    p = m * p;
-    a *= 0.5;
-  }
-  return v;
-}
+${waterNoiseGLSL}
 
 void main(){
-  float t = u_time * 0.35;
+  vec2 xz = v_world.xz;
+  float n = waterNoise(xz, u_time);
 
-  // base turquoise colour: mostly shallow, gently darkened at grazing angles
-  float up = max(dot(normalize(v_normal), vec3(0.0,1.0,0.0)), 0.0);
-  float fresnel = pow(1.0 - up, 2.0);
-  float mixAmt = 0.55 + 0.35 * up;      // keep it pretty bright overall
-  vec3 base = mix(u_deepColor, u_shallowColor, mixAmt);
+  // per pixel normal from the same height field the vertices use
+  float e = 0.01;
+  float nx = waterNoise(xz + vec2(e, 0.0), u_time) - waterNoise(xz - vec2(e, 0.0), u_time);
+  float nz = waterNoise(xz + vec2(0.0, e), u_time) - waterNoise(xz - vec2(0.0, e), u_time);
+  float slope = 2.0 * WATER_AMP / (2.0 * e);
+  vec3 N = normalize(vec3(-nx * slope, 1.0, -nz * slope));
 
-  // --- caustic pattern, projected in xz plane -----------------------
-  vec2 p = v_xz * 2.2;
+  // troughs deeper, crests lighter, in a few flat tones
+  float tone = floor(n * 4.0) / 3.0;
+  vec3 col = mix(u_deepColor, u_shallowColor, 0.45 + 0.4 * tone);
 
-  float n1 = fbm(p * 3.0 + vec2( 0.7*t, -0.4*t));
-  float n2 = fbm(p * 4.0 + vec2(-0.3*t,  0.9*t) + 7.3);
-  float n  = (n1 + n2 * 0.8) * 0.75 + 0.25;
+  // bright squiggly bands that follow the crests
+  float band = 1.0 - smoothstep(0.0, 0.025, abs(n - 0.62));
+  col = mix(col, vec3(0.92, 0.98, 1.0), band * 0.8);
 
-  // turn fbm into *thin bright lines* instead of big blobs
-  // center around ~0.55 and tighten
-  float band = clamp(1.0 - abs(n - 0.55) * 5.0, 0.0, 1.0);
-  float caustic = pow(band, 3.0);  // sharper highlights
-
-  // slight colour tilt towards white-blue on highlights
-  vec3 causticCol = vec3(1.2, 1.35, 1.45);
-
-  // mix caustics into base
-  vec3 col = base + causticCol * caustic * 0.45;
-
-  // gentle shadowing between highlights
-  col *= 0.98 - 0.10 * (1.0 - caustic);
+  // hard edged specular glints on the crest slopes
+  vec3 L = normalize(vec3(0.3, 1.0, 0.2));
+  vec3 V = normalize(u_camPos - v_world);
+  vec3 H = normalize(L + V);
+  float spec = step(0.85, pow(max(dot(N, H), 0.0), 32.0)) * smoothstep(0.5, 0.65, n);
+  col += vec3(0.9, 0.97, 1.0) * spec * 0.6;
+  col *= u_bright;
 
   // --- distance fog so far-away surface blends into tank colour -----
   float f = smoothstep(u_fogNear, u_fogFar, v_camDist);
   col = mix(col, u_fogColor, f);
 
   // slightly more transparent so we see the tank clearly
-  outColor = vec4(col, 0.45);
+  outColor = vec4(col, 0.45 + 0.3 * max(band, spec));
 }
 `;

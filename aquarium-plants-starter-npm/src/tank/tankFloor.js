@@ -4,8 +4,13 @@ import { vs, fs } from "./tankFloorShaders.js";
 // Single source of truth for tank size
 export let TANK_X_HALF = 2.6;
 export let TANK_Z_HALF = 2.2;
-export const TANK_HEIGHT = 1.8;  // Fixed height of the tank
-const SAND_DEPTH = 0.15;
+export let TANK_HEIGHT = 1.8;  // Height of the tank, which is also the water level
+export const DEFAULT_TANK_HEIGHT = 1.8;
+// Space kept between the tallest decorations and the water surface
+export const DECOR_GAP = 0.1;
+export const SAND_DEPTH = 0.15;
+// Floor extends slightly past the glass so their side faces never share a plane
+const FLOOR_OVERHANG = 0.01;
 
 // Function to update tank dimensions
 export function setTankSize(scale) {
@@ -14,6 +19,15 @@ export function setTankSize(scale) {
   const factor = scale / 50.0;
   TANK_X_HALF = 2.6 * factor;
   TANK_Z_HALF = 2.2 * factor;
+}
+
+export function setTankHeight(h) {
+  TANK_HEIGHT = h;
+}
+
+// Highest y a decoration may reach, measured from the resting sand level
+export function decorCeiling() {
+  return TANK_HEIGHT - DECOR_GAP;
 }
 
 export function createFloorLayer(gl) {
@@ -29,25 +43,29 @@ export function createFloorLayer(gl) {
 
   function prog(vsSrc, fsSrc) {
     const p = gl.createProgram();
-    gl.attachShader(p, comp(gl.VERTEX_SHADER, vsSrc));
-    gl.attachShader(p, comp(gl.FRAGMENT_SHADER, fsSrc));
+    const v = comp(gl.VERTEX_SHADER, vsSrc);
+    const f = comp(gl.FRAGMENT_SHADER, fsSrc);
+    gl.attachShader(p, v);
+    gl.attachShader(p, f);
     gl.bindAttribLocation(p, 0, "a_pos");
     gl.bindAttribLocation(p, 1, "a_face");
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
       throw new Error(gl.getProgramInfoLog(p) || "floor link fail");
     }
+    gl.deleteShader(v);
+    gl.deleteShader(f);
     return p;
   }
 
   const P = prog(vs, fs);
   const U = (n) => gl.getUniformLocation(P, n);
 
-  let vao, ib, indexCount;
+  let vao, vb, fb, ib, indexCount;
 
   function buildMesh() {
-    const xHalf = TANK_X_HALF;
-    const zHalf = TANK_Z_HALF;
+    const xHalf = TANK_X_HALF + FLOOR_OVERHANG;
+    const zHalf = TANK_Z_HALF + FLOOR_OVERHANG;
 
     const NX = 200;
     const NZ = 160;
@@ -142,14 +160,16 @@ export function createFloorLayer(gl) {
     gl.bindVertexArray(vao);
 
     // positions
-    const vb = gl.createBuffer();
+    if (vb) gl.deleteBuffer(vb);
+    vb = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vb);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
 
     // face flags
-    const fb = gl.createBuffer();
+    if (fb) gl.deleteBuffer(fb);
+    fb = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, fb);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(face), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(1);
@@ -256,7 +276,7 @@ export function createFloorLayer(gl) {
 
       // uniforms for block behavior
       gl.uniform1f(U("u_sandDepth"), SAND_DEPTH);
-      gl.uniform2f(U("u_tankHalf"), TANK_X_HALF, TANK_Z_HALF);
+      gl.uniform2f(U("u_tankHalf"), TANK_X_HALF + FLOOR_OVERHANG, TANK_Z_HALF + FLOOR_OVERHANG);
 
       gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_INT, 0);
     },

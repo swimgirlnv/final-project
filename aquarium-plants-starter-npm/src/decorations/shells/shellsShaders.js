@@ -1,4 +1,5 @@
 // decor/shellShaders.js
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
 
 export const vs = `#version 300 es
 precision highp float;
@@ -13,6 +14,7 @@ in float i_hue;     // small per-instance tint
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
+${sandHeightGLSL}
 uniform float u_time;
 uniform float u_kind;  // 0 = scallop, 1 = auger, 2 = moon
 
@@ -37,6 +39,7 @@ void main() {
 
   v_local = p;              // local space (before scale)
   vec3 world = i_offset + p * i_scale;
+  world.y += sandOffset(i_offset.xz);
 
   v_world  = world;
   v_normal = normalize(a_normal);

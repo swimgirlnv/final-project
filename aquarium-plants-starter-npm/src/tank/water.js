@@ -30,19 +30,38 @@ export function createWaterSurfaceLayer(gl, opts = {}) {
     return p;
   }
 
-  // simple rectangle over the tank (XZ plane, centered at origin)
+  // grid over the tank (XZ plane, centered at origin) dense enough to show the waves
+  const CELL_SIZE = 0.035;
+  const MAX_CELLS = 200;
+
   function makeQuad() {
     const x = TANK_X_HALF;
     const z = TANK_Z_HALF;
 
-    const verts = new Float32Array([
-      -x, -z,
-       x, -z,
-       x,  z,
-      -x,  z,
-    ]);
+    const nx = Math.max(1, Math.min(MAX_CELLS, Math.ceil((2 * x) / CELL_SIZE)));
+    const nz = Math.max(1, Math.min(MAX_CELLS, Math.ceil((2 * z) / CELL_SIZE)));
 
-    const idx = new Uint16Array([0, 1, 2, 0, 2, 3]);
+    const verts = new Float32Array((nx + 1) * (nz + 1) * 2);
+    let v = 0;
+    for (let j = 0; j <= nz; j++) {
+      for (let i = 0; i <= nx; i++) {
+        verts[v++] = -x + (2 * x * i) / nx;
+        verts[v++] = -z + (2 * z * j) / nz;
+      }
+    }
+
+    const idx = new Uint16Array(nx * nz * 6);
+    let k = 0;
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        const a = j * (nx + 1) + i;
+        const b = a + 1;
+        const c = a + (nx + 1);
+        const d = c + 1;
+        idx[k++] = a; idx[k++] = b; idx[k++] = d;
+        idx[k++] = a; idx[k++] = d; idx[k++] = c;
+      }
+    }
 
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
@@ -57,7 +76,13 @@ export function createWaterSurfaceLayer(gl, opts = {}) {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
 
-    return { vao, count: idx.length };
+    return { vao, vb, ib, count: idx.length };
+  }
+
+  function deleteQuad(q) {
+    gl.deleteVertexArray(q.vao);
+    gl.deleteBuffer(q.vb);
+    gl.deleteBuffer(q.ib);
   }
 
   const prog = program(vs, fs, { a_xz: 0 });
@@ -68,11 +93,13 @@ export function createWaterSurfaceLayer(gl, opts = {}) {
   const u_view         = U("u_view");
   const u_time         = U("u_time");
   const u_height       = U("u_height");
+  const u_camPos       = U("u_camPos");
   const u_deepColor    = U("u_deepColor");
   const u_shallowColor = U("u_shallowColor");
   const u_fogColor     = U("u_fogColor");
   const u_fogNear      = U("u_fogNear");
   const u_fogFar       = U("u_fogFar");
+  const u_bright       = U("u_bright");
 
   const state = {
     height: opts.height ?? TANK_HEIGHT, // y position of water surface (top of tank)
@@ -90,6 +117,7 @@ export function createWaterSurfaceLayer(gl, opts = {}) {
     },
 
     regenerate() {
+      deleteQuad(quad);
       quad = makeQuad();
     },
 
@@ -111,6 +139,7 @@ export function createWaterSurfaceLayer(gl, opts = {}) {
       gl.uniformMatrix4fv(u_view, false, shared.view);
       gl.uniform1f(u_time, shared.time);
       gl.uniform1f(u_height, state.height);
+      gl.uniform3f(u_camPos, shared.camPos[0], shared.camPos[1], shared.camPos[2]);
 
       gl.uniform3f(
         u_deepColor,
@@ -133,6 +162,7 @@ export function createWaterSurfaceLayer(gl, opts = {}) {
       );
       gl.uniform1f(u_fogNear, shared.fogNear);
       gl.uniform1f(u_fogFar,  shared.fogFar);
+      gl.uniform1f(u_bright, shared.sceneBright ?? 1.0);
 
       gl.drawElements(gl.TRIANGLES, quad.count, gl.UNSIGNED_SHORT, 0);
 

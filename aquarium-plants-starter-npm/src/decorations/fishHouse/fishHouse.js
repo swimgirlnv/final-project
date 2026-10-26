@@ -1,5 +1,7 @@
 import { vs, fs } from "./fishHouseShaders.js";
-import { registerObject, findValidPosition } from "../../sceneCollision.js";
+import { registerObject, findValidPosition, clearObjectsByType } from "../../sceneCollision.js";
+import { makeSandUniforms } from "../../tank/sandHeight.js";
+import { decorCeiling } from "../../tank/tankFloor.js";
 
 export function createFishHouseLayer(gl) {
   function compile(type, src) {
@@ -168,7 +170,13 @@ export function createFishHouseLayer(gl) {
       );
     }
 
-    return { pos, norm, uv, idx };
+    // shrink the whole house if it would reach past the water
+    let top = 0;
+    for (let i = 1; i < pos.length; i += 3) top = Math.max(top, pos[i]);
+    const fit = Math.min(1, decorCeiling() / top);
+    if (fit < 1) for (let i = 0; i < pos.length; i++) pos[i] *= fit;
+
+    return { pos, norm, uv, idx, top: top * fit };
   }
   
   let mesh = makeHouse();
@@ -204,6 +212,7 @@ export function createFishHouseLayer(gl) {
 
   const prog = program(vs, fs, { a_pos: 0, a_normal: 1, a_uv: 2 });
 
+  const setSandUniforms = makeSandUniforms(gl, prog);
   const U = (n) => gl.getUniformLocation(prog, n);
   const u_proj = U("u_proj"),
     u_view = U("u_view"),
@@ -218,20 +227,30 @@ export function createFishHouseLayer(gl) {
     1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
   ]);
 
-  // Find a valid position for the fish house
-  const houseRadius = 0.35;
-  const pos = findValidPosition(houseRadius, 100, 0.02);
-  if (pos) {
-    model[12] = pos.x;
-    model[13] = 0.0;
-    model[14] = pos.z;
-    registerObject(pos.x, pos.z, houseRadius, "fishHouse");
-  } else {
-    // Fallback position if no valid spot found
-    model[12] = 0.7;
-    model[13] = 0.0;
-    model[14] = -0.9;
+  // Widest XZ extent of the mesh plus padding for leaf sway
+  function measureRadius() {
+    let r = 0;
+    for (let i = 0; i < mesh.pos.length; i += 3) {
+      r = Math.max(r, Math.hypot(mesh.pos[i], mesh.pos[i + 2]));
+    }
+    return r + 0.05;
   }
+
+  // Place the house at a free spot, or hide it when it cannot fit in the tank
+  let visible = false;
+  function place() {
+    clearObjectsByType("fishHouse");
+    const houseRadius = measureRadius();
+    const pos = findValidPosition(houseRadius, 100, 0.02);
+    visible = !!pos;
+    if (pos) {
+      model[12] = pos.x;
+      model[13] = 0.0;
+      model[14] = pos.z;
+      registerObject(pos.x, pos.z, houseRadius, "fishHouse");
+    }
+  }
+  place();
 
   return {
     setPosition(x, y, z) {
@@ -258,24 +277,19 @@ export function createFishHouseLayer(gl) {
       params.leafLength = l;
     },
     regenerate() {
-      // Find a new valid position
-      const houseRadius = 0.35;
-      const pos = findValidPosition(houseRadius, 100, 0.02);
-      if (pos) {
-        model[12] = pos.x;
-        model[13] = 0.0;
-        model[14] = pos.z;
-        registerObject(pos.x, pos.z, houseRadius, "fishHouse");
-      }
       mesh = makeHouse();
       buildBuffers();
+      place();
     },
     draw(shared) {
+      if (!visible) return;
+
       // --- temporarily disable back-face culling for the house (body + leaves) ---
       const cullWasOn = gl.isEnabled(gl.CULL_FACE);
       if (cullWasOn) gl.disable(gl.CULL_FACE);
 
       gl.useProgram(prog);
+      setSandUniforms(shared, mesh.top);
       gl.bindVertexArray(vao);
       gl.uniformMatrix4fv(u_proj, false, shared.proj);
       gl.uniformMatrix4fv(u_view, false, shared.view);

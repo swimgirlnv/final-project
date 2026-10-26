@@ -1,3 +1,5 @@
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
+
 export const vs = `#version 300 es
 precision highp float;
 
@@ -12,6 +14,7 @@ in float i_wobble;  // phase
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
+${sandHeightGLSL}
 uniform float u_time;
 
 out vec3 v_normal;
@@ -70,6 +73,7 @@ void main(){
   v_local = p;
 
   vec3 world = i_offset + p * radius;
+  world.y += sandOffset(i_offset.xz);
   v_world = world;
 
   // approximate normal from (displaced) position relative to center

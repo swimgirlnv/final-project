@@ -1,4 +1,5 @@
 // egeriaDensaShaders.js
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
 
 export const vs = `#version 300 es
 precision highp float;
@@ -17,6 +18,7 @@ in vec2  i_hueKind;       // (hue, kind: 0 leaf, 1 stem)
 
 // Uniforms
 uniform mat4  u_proj, u_view;
+${sandHeightGLSL}
 uniform float u_time;
 uniform float u_currentStrength;
 uniform vec2  u_currentDir;
@@ -34,6 +36,20 @@ vec3 h2rgb(float h){
   float g = 2.0 - abs(h*6.0 - 2.0);
   float b = 2.0 - abs(h*6.0 - 4.0);
   return clamp(vec3(r,g,b),0.0,1.0);
+}
+
+// overall mellowing factor so even big UI values stay gentle
+const float GENTLE = 0.35;
+// stem height where the sway reaches full strength
+const float STEM_SWAY_HEIGHT = 1.2;
+
+// Sideways stem displacement at height y above the plant base
+float stemSway(float y, float phase, float j){
+  float h  = y / STEM_SWAY_HEIGHT;
+  float tw = smoothstep(0.15, 1.0, h);
+  float sway   = sin(phase + h*1.6) * u_currentStrength * tw * GENTLE;
+  float wobble = 0.015 * sin(7.0*h + u_time*1.7 + j*20.0) * tw;
+  return sway + wobble;
 }
 
 void main(){
@@ -72,16 +88,16 @@ void main(){
     // Water sway (BASE FIXED, gentle)
   float j = hash21(i_originXZ);                           // per-plant phase
   float phase = 6.2831853*j + u_time*(0.6 + 0.4*j);       // a bit slower
-  float tipW  = mix(pow(t, 1.6), smoothstep(0.15, 1.0, t), isStem);
   vec3 lateral = (abs(u_currentDir.x)+abs(u_currentDir.y) < 1e-5)
                ? vec3(1.0,0.0,0.0)
                : normalize(vec3(-u_currentDir.y, 0.0, u_currentDir.x));
 
-  // ↓ overall mellowing factor so even big UI values stay gentle
-  const float GENTLE = 0.35;
-
-  float sway   = sin(phase + t*1.6) * u_currentStrength * tipW * GENTLE;
-  float wobble = 0.015 * sin(7.0*t + u_time*1.7 + j*20.0) * tipW; // tiny secondary
+  // stems bend with height, leaves ride the stem at their attachment point and add their own flutter
+  float leafTipW = pow(t, 1.6);
+  float leafSway = sin(phase + t*1.6) * u_currentStrength * leafTipW * GENTLE
+                 + 0.015 * sin(7.0*t + u_time*1.7 + j*20.0) * leafTipW;
+  float stemY = i_originYLen.x + t * i_originYLen.y * isStem;
+  float sway  = stemSway(stemY, phase, j) + leafSway * (1.0 - isStem);
 
   // Width taper
   float taper = mix(1.0 - 0.85*t, mix(1.0, 0.7, t), isStem);
@@ -92,7 +108,8 @@ void main(){
          + tangent * (t * i_originYLen.y)          // grow up the stem/leaf axis
          + normal  * (a_pos.x * w)                 // ribbon width
          + radial  * arch                          // gentle outward bulge
-         + lateral * (sway + wobble);              // lateral sway (anchored at t=0)
+         + lateral * sway;                         // lateral sway (anchored at the plant base)
+  P.y = onSand(i_originXZ, P.y);
 
   vec4 V = u_view * vec4(P, 1.0);
   v_camDist = length(V.xyz);

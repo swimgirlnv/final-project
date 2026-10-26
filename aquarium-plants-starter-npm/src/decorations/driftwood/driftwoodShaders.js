@@ -1,4 +1,5 @@
 // tank/driftwoodShaders.js
+import { sandHeightGLSL } from "../../tank/sandHeight.js";
 export const vs = `#version 300 es
 precision highp float;
 
@@ -8,6 +9,7 @@ in vec2 a_uv;    // (u around, v along)
 in float a_hue;  // per-piece hue bias
 
 uniform mat4 u_proj, u_view;
+${sandHeightGLSL}
 
 out vec3  v_nrmW;
 out vec3  v_posW;
@@ -16,12 +18,15 @@ out float v_hue;
 out float v_camDist;
 
 void main(){
-  v_posW = a_pos;
+  // follow the sand surface under each vertex
+  vec3 pos = vec3(a_pos.x, onSand(a_pos.xz, a_pos.y), a_pos.z);
+
+  v_posW = pos;
   v_nrmW = normalize(a_nrm);
   v_uv   = a_uv;
   v_hue  = a_hue;
 
-  vec4 V = u_view * vec4(a_pos, 1.0);
+  vec4 V = u_view * vec4(pos, 1.0);
   v_camDist = length(V.xyz);
   gl_Position = u_proj * V;
 }

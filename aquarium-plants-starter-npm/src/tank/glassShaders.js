@@ -1,3 +1,4 @@
+import { sandHeightGLSL } from "./sandHeight.js";
 
 export const vs = `#version 300 es
 precision highp float;
@@ -7,17 +8,23 @@ in vec3 a_normal;
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
+uniform float u_sandDepth;
+${sandHeightGLSL}
 
 out vec3 v_normal;
 out float v_camDist;
 out float v_height;
 
 void main() {
-  vec4 world = vec4(a_pos, 1.0);
+  // bottom edge vertices follow the underside of the sand slab
+  vec3 p = a_pos;
+  if (p.y < -0.5) p.y = sandOffset(p.xz) - 0.03 - u_sandDepth;
+
+  vec4 world = vec4(p, 1.0);
   vec4 viewPos = u_view * world;
 
   v_camDist = length(viewPos.xyz);
-  v_height  = a_pos.y;
+  v_height  = p.y;
 
   // rotate normal into view space (ignore translation)
   mat3 nmat = mat3(u_view);
@@ -46,6 +53,9 @@ uniform float u_fogFar;
 uniform float u_yMin;
 uniform float u_yMax;
 
+// scene brightness, lowered in disco mode
+uniform float u_bright;
+
 void main() {
   vec3 n = normalize(v_normal);
 
@@ -61,6 +71,8 @@ void main() {
   // Blend a little with scene fog so far-away sides fade nicely
   float f = smoothstep(u_fogNear, u_fogFar, v_camDist);
   col = mix(col, u_fogColor, f * 0.4);
+
+  col *= u_bright;
 
   float alpha = clamp(u_alpha + edge * 0.18, 0.05, 0.85);
 
