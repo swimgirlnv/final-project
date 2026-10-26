@@ -462,7 +462,7 @@ const cam = {
   az: Math.PI * 1.5,
   el: 0.09,
   minR: 1.1,
-  maxR: 7.0,
+  maxR: mobileQuery.matches ? 11.0 : 7.0, // phones can zoom out further to fit the narrow screen
   minEl: 0.02,
   maxEl: 1.25,
   vAz: 0,
@@ -491,17 +491,38 @@ const ROT_SPEED = 0.005,
 const activePointers = new Map();
 let pinching = false;
 let pinchDist = 0;
+let gesturePinched = false; // true once the current touch became a pinch, so lifting is never a click
 
 function pointerSpread() {
   const [a, b] = [...activePointers.values()];
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+// Forgets a finger and, if one is left after a pinch, goes back to rotating with it
+function releasePointer(e) {
+  activePointers.delete(e.pointerId);
+  if (pinching && activePointers.size === 1) {
+    const [rest] = activePointers.values();
+    lastX = rest.x;
+    lastY = rest.y;
+    isDragging = true;
+  }
+  if (activePointers.size < 2) pinching = false;
+  if (activePointers.size === 0) isDragging = false;
+}
+
 canvas.addEventListener("pointerdown", (e) => {
+  // the first finger of a new touch means no others are down, so drop any the browser never released
+  if (e.isPrimary) {
+    activePointers.clear();
+    pinching = false;
+    gesturePinched = false;
+  }
   activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (activePointers.size === 2) {
     // a second finger turns the drag into a pinch
     pinching = true;
+    gesturePinched = true;
     isDragging = false;
     pinchDist = pointerSpread();
   }
@@ -538,23 +559,21 @@ canvas.addEventListener("pointermove", (e) => {
   cam.vAz += dx * ROT_SPEED;
   cam.vEl += dy * EL_SPEED;
 });
-canvas.addEventListener("pointercancel", (e) => {
-  activePointers.delete(e.pointerId);
-  if (activePointers.size < 2) pinching = false;
-  isDragging = false;
-  canvas.style.cursor = "grab";
-});
+// browsers sometimes end a touch with only one of these, so both release the finger
+for (const type of ["pointercancel", "lostpointercapture"]) {
+  canvas.addEventListener(type, (e) => {
+    if (!activePointers.has(e.pointerId)) return;
+    releasePointer(e);
+    canvas.style.cursor = "grab";
+  });
+}
 canvas.addEventListener("pointerup", (e) => {
-  const wasPinching = pinching;
-  activePointers.delete(e.pointerId);
-  if (activePointers.size < 2) pinching = false;
-
-  isDragging = false;
-  canvas.releasePointerCapture(e.pointerId);
+  releasePointer(e);
+  if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   canvas.style.cursor = "grab";
 
   // lifting a finger after a pinch is not a click
-  if (wasPinching || activePointers.size > 0) return;
+  if (gesturePinched || activePointers.size > 0) return;
 
   const dx = e.clientX - clickStartX;
   const dy = e.clientY - clickStartY;
@@ -1344,8 +1363,10 @@ let last = performance.now(),
   const view = lookAt(eye, cam.target, [0, 1, 0]);
 
   // Fog adapt (DON'T read "shared" before it's defined)
-  FOG.near = 0.6 * cam.r;
-  FOG.far = 2.0 + 1.9 * cam.r;
+  // the fog never fully darkens the tank, even when zoomed in close
+  const tankReach = Math.hypot(TANK_X_HALF, TANK_Z_HALF, TANK_HEIGHT * 0.5);
+  FOG.near = Math.max(0.6 * cam.r, 2.0);
+  FOG.far = Math.max(2.0 + 1.9 * cam.r, 1.25 * (cam.r + tankReach));
 
   // Current direction from UI
   const ang =
